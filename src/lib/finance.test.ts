@@ -17,7 +17,7 @@ const dashboardFixture: DashboardData = {
       currency: 'USD',
       balance: 500,
       rate: 20,
-      minPayment: 40,
+      payments: 12.5,
       dueDate: '2026-03-20',
       createdAt: '2026-03-01T00:00:00.000Z',
     },
@@ -56,6 +56,7 @@ const dashboardFixture: DashboardData = {
       createdAt: '2026-03-01T00:00:00.000Z',
     },
   ],
+  recurringPayments: [],
   settings: {
     currency: 'USD',
     lastUpdated: '2026-03-01T00:00:00.000Z',

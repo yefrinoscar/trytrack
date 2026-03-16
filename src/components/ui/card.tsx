@@ -1,18 +1,19 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
-const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn(
-        'rounded-[1.25rem] border border-[var(--border)] bg-[var(--panel)]',
-        className,
-      )}
-      {...props}
-    />
-  ),
-)
+const Card = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      'rounded-[1.25rem] border border-[var(--border)] bg-[var(--panel)]',
+      className,
+    )}
+    {...props}
+  />
+))
 
 Card.displayName = 'Card'
 
@@ -22,7 +23,10 @@ const CardHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('flex flex-col gap-1.5 border-b border-[var(--border)] px-4 py-3', className)}
+    className={cn(
+      'flex flex-col gap-1.5 border-b border-[var(--border)] px-4 py-3',
+      className,
+    )}
     {...props}
   />
 ))
@@ -35,7 +39,10 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn('text-base font-semibold tracking-tight text-[var(--foreground)]', className)}
+    className={cn(
+      'text-base font-semibold tracking-tight text-[var(--foreground)]',
+      className,
+    )}
     {...props}
   />
 ))
@@ -48,7 +55,10 @@ const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn('text-sm leading-6 text-[var(--foreground-soft)]', className)}
+    className={cn(
+      'text-base leading-6 text-[var(--foreground-soft)]',
+      className,
+    )}
     {...props}
   />
 ))
@@ -70,7 +80,10 @@ const CardFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('flex items-center border-t border-[var(--border)] px-4 py-3', className)}
+    className={cn(
+      'flex items-center border-t border-[var(--border)] px-4 py-3',
+      className,
+    )}
     {...props}
   />
 ))

@@ -1,12 +1,12 @@
-Welcome to your new TanStack Start app! 
+Welcome to your new TanStack Start app!
 
 # Getting Started
 
 To run this application:
 
 ```bash
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 # Building For Production
@@ -14,7 +14,7 @@ pnpm dev
 To build this application for production:
 
 ```bash
-pnpm build
+npm run build
 ```
 
 ## Testing
@@ -22,7 +22,7 @@ pnpm build
 This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
 
 ```bash
-pnpm test
+npm run test
 ```
 
 ## Styling
@@ -36,29 +36,25 @@ If you prefer not to use Tailwind CSS:
 1. Remove the demo pages in `src/routes/demo/`
 2. Replace the Tailwind import in `src/styles.css` with your own styles
 3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `pnpm add @tailwindcss/vite tailwindcss --dev`
+4. Uninstall the packages: `npm uninstall @tailwindcss/vite tailwindcss`
 
 ## Linting & Formatting
-
 
 This project uses [eslint](https://eslint.org/) and [prettier](https://prettier.io/) for linting and formatting. Eslint is configured using [tanstack/eslint-config](https://tanstack.com/config/latest/docs/eslint). The following scripts are available:
 
 ```bash
-pnpm lint
-pnpm format
-pnpm check
+npm run lint
+npm run format
+npm run check
 ```
-
 
 ## Shadcn
 
 Add components using the latest version of [Shadcn](https://ui.shadcn.com/).
 
 ```bash
-pnpm dlx shadcn@latest add button
+npx shadcn@latest add button
 ```
-
-
 
 ## Routing
 
@@ -77,7 +73,7 @@ Now that you have two routes you can use a `Link` component to navigate between 
 To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
 
 ```tsx
-import { Link } from "@tanstack/react-router";
+import { Link } from '@tanstack/react-router'
 ```
 
 Then anywhere in your JSX you can use it like so:
@@ -145,11 +141,11 @@ const getServerTime = createServerFn({
 // Use in a component
 function MyComponent() {
   const [time, setTime] = useState('')
-  
+
   useEffect(() => {
     getServerTime().then(setTime)
   }, [])
-  
+
   return <div>Server time: {time}</div>
 }
 ```

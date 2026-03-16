@@ -119,7 +119,7 @@ pre code {
 }
 
 .page-wrap {
-  width: min(1040px, calc(100% - 2rem));
+  width: min(1040px, calc(100% - 0.5rem));
   margin-inline: auto;
 }
 

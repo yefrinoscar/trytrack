@@ -65,6 +65,8 @@ export interface DashboardSettings {
   lastUpdated: string
 }
 
+export type RecurringPaymentStatus = 'active' | 'paused' | 'cancelled'
+
 export interface RecurringPayment {
   id: string
   name: string
@@ -72,6 +74,8 @@ export interface RecurringPayment {
   amount: number
   currency: string
   dueDay: number
+  status: RecurringPaymentStatus
+  startDate: string
   createdAt: string
 }
 
@@ -134,6 +138,16 @@ export type CreateItemInput =
 export interface UpdateDebtInput {
   id: string
   value: Omit<Debt, 'id' | 'createdAt'>
+}
+
+export type CreateRecurringPaymentInput = Omit<
+  RecurringPayment,
+  'id' | 'createdAt'
+>
+
+export interface UpdateRecurringPaymentInput {
+  id: string
+  value: Partial<Omit<RecurringPayment, 'id' | 'createdAt'>>
 }
 
 const STORAGE_KEY = 'spends.sh:dashboard:v1'
@@ -270,6 +284,8 @@ const seedData: DashboardData = {
       amount: 15.99,
       currency: 'USD',
       dueDay: 5,
+      status: 'active',
+      startDate: '2026-01-15',
       createdAt: '2026-01-15T09:00:00.000Z',
     },
     {
@@ -279,15 +295,19 @@ const seedData: DashboardData = {
       amount: 10.99,
       currency: 'USD',
       dueDay: 10,
+      status: 'active',
+      startDate: '2026-01-20',
       createdAt: '2026-01-20T09:00:00.000Z',
     },
     {
       id: 'recurring-gym',
       name: 'Gym membership',
       category: 'Health',
-      amount: 45.00,
+      amount: 45.0,
       currency: 'USD',
       dueDay: 1,
+      status: 'active',
+      startDate: '2026-01-10',
       createdAt: '2026-01-10T09:00:00.000Z',
     },
     {
@@ -297,15 +317,19 @@ const seedData: DashboardData = {
       amount: 79.99,
       currency: 'USD',
       dueDay: 15,
+      status: 'active',
+      startDate: '2026-01-05',
       createdAt: '2026-01-05T09:00:00.000Z',
     },
     {
       id: 'recurring-phone',
       name: 'Phone plan',
       category: 'Utilities',
-      amount: 65.00,
+      amount: 65.0,
       currency: 'USD',
       dueDay: 20,
+      status: 'active',
+      startDate: '2026-01-08',
       createdAt: '2026-01-08T09:00:00.000Z',
     },
     {
@@ -315,15 +339,19 @@ const seedData: DashboardData = {
       amount: 2.99,
       currency: 'USD',
       dueDay: 12,
+      status: 'active',
+      startDate: '2026-01-25',
       createdAt: '2026-01-25T09:00:00.000Z',
     },
     {
       id: 'recurring-insurance',
       name: 'Car insurance',
       category: 'Insurance',
-      amount: 125.00,
+      amount: 125.0,
       currency: 'USD',
       dueDay: 1,
+      status: 'active',
+      startDate: '2026-01-03',
       createdAt: '2026-01-03T09:00:00.000Z',
     },
     {
@@ -333,6 +361,8 @@ const seedData: DashboardData = {
       amount: 11.99,
       currency: 'USD',
       dueDay: 8,
+      status: 'active',
+      startDate: '2026-02-01',
       createdAt: '2026-02-01T09:00:00.000Z',
     },
     {
@@ -342,6 +372,8 @@ const seedData: DashboardData = {
       amount: 14.99,
       currency: 'USD',
       dueDay: 25,
+      status: 'active',
+      startDate: '2026-01-12',
       createdAt: '2026-01-12T09:00:00.000Z',
     },
     {
@@ -351,6 +383,8 @@ const seedData: DashboardData = {
       amount: 7.99,
       currency: 'USD',
       dueDay: 18,
+      status: 'active',
+      startDate: '2026-02-05',
       createdAt: '2026-02-05T09:00:00.000Z',
     },
   ],
@@ -485,16 +519,16 @@ function normalizeDashboardData(input: unknown): DashboardData {
   return {
     debts: Array.isArray(value.debts)
       ? value.debts.map((debt) => ({
-        ...debt,
-        currency:
-          typeof debt.currency === 'string' && debt.currency
-            ? debt.currency
-            : fallback.settings.currency,
-        payments:
-          typeof (debt as any).payments === 'number'
-            ? (debt as any).payments
-            : 1,
-      }))
+          ...debt,
+          currency:
+            typeof debt.currency === 'string' && debt.currency
+              ? debt.currency
+              : fallback.settings.currency,
+          payments:
+            typeof (debt as any).payments === 'number'
+              ? (debt as any).payments
+              : 1,
+        }))
       : fallback.debts,
     incomes: Array.isArray(value.incomes) ? value.incomes : fallback.incomes,
     investments: Array.isArray(value.investments)
@@ -502,7 +536,27 @@ function normalizeDashboardData(input: unknown): DashboardData {
       : fallback.investments,
     goals: Array.isArray(value.goals) ? value.goals : fallback.goals,
     recurringPayments: Array.isArray(value.recurringPayments)
-      ? value.recurringPayments
+      ? value.recurringPayments.map((payment) => ({
+          ...payment,
+          currency:
+            typeof payment.currency === 'string' && payment.currency
+              ? payment.currency
+              : fallback.settings.currency,
+          dueDay:
+            typeof payment.dueDay === 'number'
+              ? Math.max(1, Math.min(31, Math.round(payment.dueDay)))
+              : 1,
+          status:
+            payment.status === 'paused' || payment.status === 'cancelled'
+              ? payment.status
+              : 'active',
+          startDate:
+            typeof payment.startDate === 'string' && payment.startDate
+              ? payment.startDate
+              : typeof payment.createdAt === 'string' && payment.createdAt
+                ? payment.createdAt.slice(0, 10)
+                : new Date().toISOString().slice(0, 10),
+        }))
       : fallback.recurringPayments,
     settings: {
       currency:
@@ -670,11 +724,50 @@ export function useFinanceActions() {
         debts: current.debts.map((debt) =>
           debt.id === id
             ? {
-              ...debt,
-              ...value,
-            }
+                ...debt,
+                ...value,
+              }
             : debt,
         ),
+      }))
+    },
+    onSuccess: syncCache,
+  })
+
+  const createRecurringPaymentMutation = useMutation({
+    mutationFn: async (input: CreateRecurringPaymentInput) => {
+      return updateDashboardData((current) => ({
+        ...current,
+        recurringPayments: [
+          {
+            ...input,
+            id: createId('recurring'),
+            createdAt: new Date().toISOString(),
+          },
+          ...current.recurringPayments,
+        ],
+      }))
+    },
+    onSuccess: syncCache,
+  })
+
+  const updateRecurringPaymentMutation = useMutation({
+    mutationFn: async ({ id, value }: UpdateRecurringPaymentInput) => {
+      return updateDashboardData((current) => ({
+        ...current,
+        recurringPayments: current.recurringPayments.map((p) =>
+          p.id === id ? { ...p, ...value } : p,
+        ),
+      }))
+    },
+    onSuccess: syncCache,
+  })
+
+  const removeRecurringPaymentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return updateDashboardData((current) => ({
+        ...current,
+        recurringPayments: current.recurringPayments.filter((p) => p.id !== id),
       }))
     },
     onSuccess: syncCache,
@@ -711,6 +804,9 @@ export function useFinanceActions() {
     createItem: createItemMutation.mutateAsync,
     removeItem: removeItemMutation.mutateAsync,
     updateDebt: updateDebtMutation.mutateAsync,
+    createRecurringPayment: createRecurringPaymentMutation.mutateAsync,
+    updateRecurringPayment: updateRecurringPaymentMutation.mutateAsync,
+    removeRecurringPayment: removeRecurringPaymentMutation.mutateAsync,
     updateSettings: updateSettingsMutation.mutateAsync,
     resetDemoData: resetDemoDataMutation.mutateAsync,
     clearDashboard: clearDashboardMutation.mutateAsync,
@@ -718,6 +814,9 @@ export function useFinanceActions() {
       createItemMutation.isPending ||
       removeItemMutation.isPending ||
       updateDebtMutation.isPending ||
+      createRecurringPaymentMutation.isPending ||
+      updateRecurringPaymentMutation.isPending ||
+      removeRecurringPaymentMutation.isPending ||
       updateSettingsMutation.isPending ||
       resetDemoDataMutation.isPending ||
       clearDashboardMutation.isPending,
@@ -725,6 +824,16 @@ export function useFinanceActions() {
 }
 
 export function formatCurrency(value: number, currency = 'USD') {
+  if (currency.toUpperCase() === 'PEN') {
+    const absoluteValue = Math.abs(value)
+    const sign = value < 0 ? '-' : ''
+    const formattedValue = new Intl.NumberFormat('en-US', {
+      maximumFractionDigits: 0,
+    }).format(absoluteValue)
+
+    return `${sign}S/. ${formattedValue}`
+  }
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -733,6 +842,17 @@ export function formatCurrency(value: number, currency = 'USD') {
 }
 
 export function formatCompactCurrency(value: number, currency = 'USD') {
+  if (currency.toUpperCase() === 'PEN') {
+    const absoluteValue = Math.abs(value)
+    const sign = value < 0 ? '-' : ''
+    const formattedValue = new Intl.NumberFormat('en-US', {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(absoluteValue)
+
+    return `${sign}S/. ${formattedValue}`
+  }
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -817,7 +937,10 @@ export function getDebtMonthlyTotalsByCurrency(debts: Debt[]) {
 
   debts.forEach((debt) => {
     const current = totals.get(debt.currency) ?? 0
-    totals.set(debt.currency, current + getDebtMonthlyPayment(debt.balance, debt.payments))
+    totals.set(
+      debt.currency,
+      current + getDebtMonthlyPayment(debt.balance, debt.payments),
+    )
   })
 
   return [...totals.entries()]
@@ -1059,8 +1182,8 @@ export function getDebtMonthlyPlan(
       0,
     )
 
-    const items = monthState.map(state => {
-      const debt = activeDebts.find(d => d.id === state.id)
+    const items = monthState.map((state) => {
+      const debt = activeDebts.find((d) => d.id === state.id)
       return {
         id: state.id,
         name: state.name || state.id,
@@ -1077,9 +1200,9 @@ export function getDebtMonthlyPlan(
         monthIndex === 0
           ? 'This month'
           : pointDate.toLocaleDateString('en-US', {
-            month: 'short',
-            year: '2-digit',
-          }),
+              month: 'short',
+              year: '2-digit',
+            }),
       totalPayment,
       interest,
       principal: Math.max(totalPayment - interest, 0),

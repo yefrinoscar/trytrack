@@ -19,7 +19,7 @@ const navItems = [
 
 export default function Header() {
   return (
-    <aside className="border-b border-[var(--border)] lg:sticky lg:top-0 lg:self-start lg:flex lg:min-h-screen lg:flex-col pt-10 lg:border-b-0">
+    <aside className="border-b border-[var(--border)] lg:sticky lg:top-0 lg:self-start lg:flex lg:min-h-screen lg:flex-col pt-16 lg:border-b-0">
       <div className="px-4 pb-4 pt-4 sm:px-5 lg:px-4 lg:pb-5 lg:pt-5 bg-[var(--sidebar)] rounded-lg">
         <div className="flex items-center justify-between gap-3 lg:block">
           <Link
