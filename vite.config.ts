@@ -135,7 +135,7 @@ const plugins = isTest
             name: 'trytrack',
             observability: {
               logs: {
-                enabled: false,
+                enabled: true,
                 invocation_logs: true,
               },
             },
