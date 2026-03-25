@@ -16,7 +16,7 @@ interface InlineEditProps extends Omit<
   value: string
   displayValue: string
   onChange: (value: string) => void
-  onSave?: () => void
+  onSave?: (value: string) => void
 }
 
 export function InlineEdit({
@@ -43,7 +43,7 @@ export function InlineEdit({
     setIsEditing(false)
     if (tempValue !== value) {
       onChange(tempValue)
-      onSave?.()
+      onSave?.(tempValue)
     }
   }
 
@@ -99,7 +99,7 @@ interface InlineDateEditProps {
   value: string
   displayValue: string
   onChange: (value: string) => void
-  onSave?: () => void
+  onSave?: (value: string) => void
 }
 
 export function InlineDateEdit({
@@ -115,7 +115,7 @@ export function InlineDateEdit({
     if (date) {
       const dateStr = date.toISOString().slice(0, 10)
       onChange(dateStr)
-      onSave?.()
+      onSave?.(dateStr)
     }
     setIsOpen(false)
   }
@@ -155,7 +155,7 @@ interface InlineSelectProps {
   value: string
   options: Array<{ value: string; label: string }>
   onChange: (value: string) => void
-  onSave?: () => void
+  onSave?: (value: string) => void
 }
 
 export function InlineSelect({
@@ -179,7 +179,7 @@ export function InlineSelect({
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     onChange(e.target.value)
     setIsEditing(false)
-    onSave?.()
+    onSave?.(e.target.value)
   }
 
   const handleBlur = () => {

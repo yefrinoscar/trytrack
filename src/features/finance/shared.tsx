@@ -35,20 +35,22 @@ function useHydrated() {
 
 export function FinancePageState({
   children,
+  loading,
 }: {
   children: (data: DashboardData, actions: FinanceActions) => ReactNode
+  loading?: ReactNode
 }) {
   const hydrated = useHydrated()
   const dashboardQuery = useFinanceDashboard(hydrated)
   const actions = useFinanceActions()
 
   if (!hydrated || dashboardQuery.isPending) {
-    return <LoadingState />
+    return <>{loading ?? <LoadingState />}</>
   }
 
   if (dashboardQuery.isError) {
     return (
-      <main className="page-wrap px-4 pb-16 pt-10">
+      <main className="page-wrap px-4 pb-16">
         <Card>
           <CardHeader>
             <CardTitle>Could not load your desk</CardTitle>
@@ -67,7 +69,7 @@ export function FinancePageState({
 
 function LoadingState() {
   return (
-    <main className="page-wrap px-4 pb-16 pt-10">
+    <main className="page-wrap px-4 pb-16">
       <div className="animate-pulse space-y-4">
         <div className="h-8 w-32 rounded-md bg-[var(--panel)]" />
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_300px]">

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useConvex } from 'convex/react'
+import { useMemo } from 'react'
 import { api } from '../../convex/_generated/api'
 import type { Doc, Id } from '../../convex/_generated/dataModel'
 
@@ -291,6 +292,59 @@ function toDebt(value: ConvexDebtDoc): Debt {
     createdAt: new Date(value.createdAt).toISOString(),
     updatedAt: new Date(value.updatedAt).toISOString(),
   }
+}
+
+function getDefaultDebtPaymentMode(type: DebtType): DebtPaymentMode {
+  return type === 'Credit card' ? 'revolving' : 'installments'
+}
+
+function normalizeDebtInstallments(value: number) {
+  return Math.max(1, Math.round(value))
+}
+
+function deriveDebtDueDay(dueDate: string) {
+  return new Date(`${dueDate}T00:00:00`).getDate() || 1
+}
+
+function buildDebtRecord(
+  value: Omit<Debt, 'id' | 'createdAt'>,
+  {
+    id,
+    createdAt,
+    updatedAt,
+  }: { id: string; createdAt: string; updatedAt?: string },
+): Debt {
+  const payments = normalizeDebtInstallments(value.payments)
+
+  return {
+    ...value,
+    id,
+    payments,
+    paymentMode: value.paymentMode ?? getDefaultDebtPaymentMode(value.type),
+    remainingInstallments:
+      typeof value.remainingInstallments === 'number'
+        ? normalizeDebtInstallments(value.remainingInstallments)
+        : payments,
+    dueDay:
+      typeof value.dueDay === 'number'
+        ? Math.max(1, Math.min(31, Math.round(value.dueDay)))
+        : deriveDebtDueDay(value.dueDate),
+    status: value.status ?? 'active',
+    createdAt,
+    updatedAt: updatedAt ?? createdAt,
+  }
+}
+
+function sortDebtsByDueDate(debts: Debt[]) {
+  return [...debts].sort(
+    (left, right) =>
+      +new Date(`${left.dueDate}T00:00:00`) -
+      +new Date(`${right.dueDate}T00:00:00`),
+  )
+}
+
+type FinanceDashboardMutationContext = {
+  previousDashboard?: DashboardData
 }
 
 async function replaceConvexDebts(
@@ -958,14 +1012,46 @@ export function useFinanceActions() {
         }
       })
     },
-    onSuccess: (next, input) => {
-      if (input.kind === 'debts') {
-        void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
-        return
+    onMutate: async (input): Promise<FinanceDashboardMutationContext> => {
+      if (input.kind !== 'debts') {
+        return {}
       }
 
+      await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
+
+      const previousDashboard =
+        queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY)
+
+      if (!previousDashboard) {
+        return {}
+      }
+
+      const createdAt = new Date().toISOString()
+      const optimisticDebt = buildDebtRecord(input.value, {
+        id: createId('debt'),
+        createdAt,
+      })
+
+      syncCache({
+        ...previousDashboard,
+        debts: sortDebtsByDueDate([optimisticDebt, ...previousDashboard.debts]),
+      })
+
+      return { previousDashboard }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousDashboard) {
+        syncCache(context.previousDashboard)
+      }
+    },
+    onSuccess: (next) => {
       if (next) {
         syncCache(next)
+      }
+    },
+    onSettled: (_data, _error, input) => {
+      if (input.kind === 'debts') {
+        void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
       }
     },
   })
@@ -1008,7 +1094,47 @@ export function useFinanceActions() {
       })
       return null
     },
-    onSuccess: () => {
+    onMutate: async ({
+      id,
+      value,
+    }): Promise<FinanceDashboardMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
+
+      const previousDashboard =
+        queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY)
+
+      if (!previousDashboard) {
+        return {}
+      }
+
+      const updatedAt = new Date().toISOString()
+
+      syncCache({
+        ...previousDashboard,
+        debts: sortDebtsByDueDate(
+          previousDashboard.debts.map((debt) =>
+            debt.id === id
+              ? buildDebtRecord(
+                  { ...debt, ...value, updatedAt },
+                  {
+                    id: debt.id,
+                    createdAt: debt.createdAt,
+                    updatedAt,
+                  },
+                )
+              : debt,
+          ),
+        ),
+      })
+
+      return { previousDashboard }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousDashboard) {
+        syncCache(context.previousDashboard)
+      }
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
     },
   })
@@ -1095,27 +1221,49 @@ export function useFinanceActions() {
     },
   })
 
-  return {
-    createItem: createItemMutation.mutateAsync,
-    removeItem: removeItemMutation.mutateAsync,
-    updateDebt: updateDebtMutation.mutateAsync,
-    createRecurringPayment: createRecurringPaymentMutation.mutateAsync,
-    updateRecurringPayment: updateRecurringPaymentMutation.mutateAsync,
-    removeRecurringPayment: removeRecurringPaymentMutation.mutateAsync,
-    updateSettings: updateSettingsMutation.mutateAsync,
-    resetDemoData: resetDemoDataMutation.mutateAsync,
-    clearDashboard: clearDashboardMutation.mutateAsync,
-    isWorking:
-      createItemMutation.isPending ||
-      removeItemMutation.isPending ||
-      updateDebtMutation.isPending ||
-      createRecurringPaymentMutation.isPending ||
-      updateRecurringPaymentMutation.isPending ||
-      removeRecurringPaymentMutation.isPending ||
-      updateSettingsMutation.isPending ||
-      resetDemoDataMutation.isPending ||
+  return useMemo(
+    () => ({
+      createItem: createItemMutation.mutateAsync,
+      removeItem: removeItemMutation.mutateAsync,
+      updateDebt: updateDebtMutation.mutateAsync,
+      createRecurringPayment: createRecurringPaymentMutation.mutateAsync,
+      updateRecurringPayment: updateRecurringPaymentMutation.mutateAsync,
+      removeRecurringPayment: removeRecurringPaymentMutation.mutateAsync,
+      updateSettings: updateSettingsMutation.mutateAsync,
+      resetDemoData: resetDemoDataMutation.mutateAsync,
+      clearDashboard: clearDashboardMutation.mutateAsync,
+      isWorking:
+        createItemMutation.isPending ||
+        removeItemMutation.isPending ||
+        updateDebtMutation.isPending ||
+        createRecurringPaymentMutation.isPending ||
+        updateRecurringPaymentMutation.isPending ||
+        removeRecurringPaymentMutation.isPending ||
+        updateSettingsMutation.isPending ||
+        resetDemoDataMutation.isPending ||
+        clearDashboardMutation.isPending,
+    }),
+    [
       clearDashboardMutation.isPending,
-  }
+      clearDashboardMutation.mutateAsync,
+      createItemMutation.isPending,
+      createItemMutation.mutateAsync,
+      createRecurringPaymentMutation.isPending,
+      createRecurringPaymentMutation.mutateAsync,
+      removeItemMutation.isPending,
+      removeItemMutation.mutateAsync,
+      removeRecurringPaymentMutation.isPending,
+      removeRecurringPaymentMutation.mutateAsync,
+      resetDemoDataMutation.isPending,
+      resetDemoDataMutation.mutateAsync,
+      updateDebtMutation.isPending,
+      updateDebtMutation.mutateAsync,
+      updateRecurringPaymentMutation.isPending,
+      updateRecurringPaymentMutation.mutateAsync,
+      updateSettingsMutation.isPending,
+      updateSettingsMutation.mutateAsync,
+    ],
+  )
 }
 
 export function formatCurrency(value: number, currency = 'USD') {

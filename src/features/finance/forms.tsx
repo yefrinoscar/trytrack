@@ -306,6 +306,8 @@ export function DebtForm({
     dueDate: '',
   })
 
+  type DebtFormState = typeof form
+
   useEffect(() => {
     if (!initialValue) {
       setForm({
@@ -334,23 +336,27 @@ export function DebtForm({
     })
   }, [defaultCurrency, initialValue])
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (!form.name.trim()) {
+  async function submitDebtForm(nextForm: DebtFormState) {
+    if (!nextForm.name.trim()) {
       return
     }
 
     await onSubmit({
-      name: form.name.trim(),
-      lender: form.lender.trim() || 'Personal ledger',
-      type: form.type,
-      currency: form.currency,
-      balance: parseMoney(form.balance),
-      rate: parseMoney(form.rate),
-      payments: Math.max(1, Math.round(parseMoney(form.payments) || 1)),
-      dueDate: form.dueDate || new Date().toISOString().slice(0, 10),
+      name: nextForm.name.trim(),
+      lender: nextForm.lender.trim() || 'Personal ledger',
+      type: nextForm.type,
+      currency: nextForm.currency,
+      balance: parseMoney(nextForm.balance),
+      rate: parseMoney(nextForm.rate),
+      payments: Math.max(1, Math.round(parseMoney(nextForm.payments) || 1)),
+      dueDate: nextForm.dueDate || new Date().toISOString().slice(0, 10),
     })
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    await submitDebtForm(form)
 
     if (!initialValue) {
       setForm({
@@ -368,21 +374,9 @@ export function DebtForm({
 
   const isEditMode = !!initialValue
 
-  const handleAutoSave = async () => {
-    if (!form.name.trim()) {
-      return
-    }
-
-    await onSubmit({
-      name: form.name.trim(),
-      lender: form.lender.trim() || 'Personal ledger',
-      type: form.type,
-      currency: form.currency,
-      balance: parseMoney(form.balance),
-      rate: parseMoney(form.rate),
-      payments: Math.max(1, Math.round(parseMoney(form.payments) || 1)),
-      dueDate: form.dueDate || new Date().toISOString().slice(0, 10),
-    })
+  const handleAutoSave = async (patch: Partial<DebtFormState> = {}) => {
+    const nextForm = { ...form, ...patch }
+    await submitDebtForm(nextForm)
   }
 
   if (isEditMode) {
@@ -396,7 +390,7 @@ export function DebtForm({
           onChange={(value) =>
             setForm((current) => ({ ...current, name: value }))
           }
-          onSave={handleAutoSave}
+          onSave={(value) => handleAutoSave({ name: value })}
         />
 
         <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
@@ -408,7 +402,7 @@ export function DebtForm({
             onChange={(value) =>
               setForm((current) => ({ ...current, lender: value }))
             }
-            onSave={handleAutoSave}
+            onSave={(value) => handleAutoSave({ lender: value })}
           />
           <InlineSelect
             label="Type"
@@ -422,7 +416,7 @@ export function DebtForm({
             onChange={(value) =>
               setForm((current) => ({ ...current, type: value as DebtType }))
             }
-            onSave={handleAutoSave}
+            onSave={(value) => handleAutoSave({ type: value as DebtType })}
           />
 
           <InlineEdit
@@ -439,7 +433,7 @@ export function DebtForm({
             onChange={(value) =>
               setForm((current) => ({ ...current, balance: value }))
             }
-            onSave={handleAutoSave}
+            onSave={(value) => handleAutoSave({ balance: value })}
           />
           <InlineSelect
             label="Currency"
@@ -455,7 +449,7 @@ export function DebtForm({
             onChange={(value) =>
               setForm((current) => ({ ...current, currency: value }))
             }
-            onSave={handleAutoSave}
+            onSave={(value) => handleAutoSave({ currency: value })}
           />
 
           <InlineEdit
@@ -469,7 +463,7 @@ export function DebtForm({
             onChange={(value) =>
               setForm((current) => ({ ...current, rate: value }))
             }
-            onSave={handleAutoSave}
+            onSave={(value) => handleAutoSave({ rate: value })}
           />
           <InlineEdit
             label="Installments"
@@ -480,7 +474,7 @@ export function DebtForm({
             onChange={(value) =>
               setForm((current) => ({ ...current, payments: value }))
             }
-            onSave={handleAutoSave}
+            onSave={(value) => handleAutoSave({ payments: value })}
           />
 
           <InlineDateEdit
@@ -494,7 +488,7 @@ export function DebtForm({
             onChange={(value) =>
               setForm((current) => ({ ...current, dueDate: value }))
             }
-            onSave={handleAutoSave}
+            onSave={(value) => handleAutoSave({ dueDate: value })}
           />
         </div>
       </div>

@@ -46,7 +46,7 @@ function SettingsView({
   const summary = getDashboardSummary(data)
 
   return (
-    <main className="page-wrap px-4 pb-16 pt-10">
+    <main className="page-wrap px-4 pb-16">
       <PageIntro
         eyebrow="Settings"
         title="Settings"

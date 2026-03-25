@@ -5,6 +5,7 @@
 @import 'tw-animate-css';
 
 :root {
+  color-scheme: dark;
   --background: #050505;
   --shell: #090909;
   --foreground: #f3f3f3;
@@ -214,26 +215,60 @@ a {
   border: none !important;
 }
 
-/* Custom scrollbar styles */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
-}
-
-/* Firefox scrollbar */
+html,
+body,
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-strong) var(--shell);
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--shell);
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--border-strong);
+  background-clip: padding-box;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+  background-clip: padding-box;
+}
+
+html::-webkit-scrollbar-corner,
+body::-webkit-scrollbar-corner,
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: var(--shell);
+}
+
+@keyframes shell-route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.shell-route-enter {
+  animation: shell-route-enter 180ms ease-out;
 }

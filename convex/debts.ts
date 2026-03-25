@@ -23,6 +23,10 @@ function defaultPaymentMode(
   return type === 'Credit card' ? 'revolving' : 'installments'
 }
 
+function normalizeInstallments(value: number) {
+  return Math.max(1, Math.round(value))
+}
+
 export const listByUser = query({
   args: { userId: v.id('users') },
   handler: async (ctx, args) => {
@@ -53,10 +57,17 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now()
+    const payments = normalizeInstallments(args.payments)
+    const remainingInstallments =
+      typeof args.remainingInstallments === 'number'
+        ? normalizeInstallments(args.remainingInstallments)
+        : payments
+
     return await ctx.db.insert('debts', {
       ...args,
+      payments,
       paymentMode: args.paymentMode ?? defaultPaymentMode(args.type),
-      remainingInstallments: args.remainingInstallments ?? args.payments,
+      remainingInstallments,
       dueDay: args.dueDay ?? deriveDueDay(args.dueDate),
       status: args.status ?? 'active',
       createdAt: now,
@@ -85,8 +96,23 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     const { id, dueDate, dueDay, ...value } = args
+    const payments =
+      typeof value.payments === 'number'
+        ? normalizeInstallments(value.payments)
+        : undefined
+    const remainingInstallments =
+      typeof payments === 'number'
+        ? payments
+        : typeof value.remainingInstallments === 'number'
+          ? normalizeInstallments(value.remainingInstallments)
+          : undefined
+
     await ctx.db.patch(id, {
       ...value,
+      ...(typeof payments === 'number' ? { payments } : {}),
+      ...(typeof remainingInstallments === 'number'
+        ? { remainingInstallments }
+        : {}),
       ...(dueDate ? { dueDate } : {}),
       ...(dueDate || dueDay
         ? {

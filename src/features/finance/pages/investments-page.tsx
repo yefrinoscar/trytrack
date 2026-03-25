@@ -67,7 +67,7 @@ function InvestmentsView({
   const averageChange = getAverageInvestmentChange(investments)
 
   return (
-    <main className="page-wrap px-4 pb-16 pt-10">
+    <main className="page-wrap px-4 pb-16">
       <PageIntro
         eyebrow="Investments"
         title="Investments"

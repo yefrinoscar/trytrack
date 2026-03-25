@@ -1,4 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { OverviewPage } from '@/features/finance/pages/overview-page'
+import { Navigate, createFileRoute } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/')({ component: OverviewPage })
+function IndexRedirect() {
+  return <Navigate to="/debts" />
+}
+
+export const Route = createFileRoute('/')({ component: IndexRedirect })

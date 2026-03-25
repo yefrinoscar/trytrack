@@ -70,7 +70,7 @@ function IncomesView({
   const nextDate = getSoonestDate(incomes.map((income) => income.nextDate))
 
   return (
-    <main className="page-wrap px-4 pb-16 pt-10">
+    <main className="page-wrap px-4 pb-16">
       <PageIntro
         eyebrow="Incomes"
         title="Income"

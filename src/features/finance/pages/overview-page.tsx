@@ -74,7 +74,7 @@ function OverviewView({ data }: { data: DashboardData }) {
   const nextGoal = sortedGoals.at(0)
 
   return (
-    <main className="page-wrap px-4 pb-16 pt-10">
+    <main className="page-wrap px-4 pb-16">
       <PageIntro
         eyebrow="Overview"
         title="Overview"

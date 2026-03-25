@@ -48,7 +48,7 @@ function GoalsView({
   const closestDeadline = getSoonestDate(goals.map((goal) => goal.deadline))
 
   return (
-    <main className="page-wrap px-4 pb-16 pt-10">
+    <main className="page-wrap px-4 pb-16">
       <PageIntro
         eyebrow="Goals"
         title="Goals"

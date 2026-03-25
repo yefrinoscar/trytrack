@@ -114,7 +114,7 @@ export function RecurringPaymentsColumn({
     setEditingPaymentId(null)
   }
   return (
-    <div className="flex flex-col rounded-[1.1rem] border border-[var(--border)] bg-[var(--panel)] p-3 sm:p-3.5">
+    <div className="inline-block align-top w-[320px] rounded-[1.1rem] border border-[var(--border)] bg-[var(--panel)] p-3 sm:p-3.5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <p className="eyebrow">Recurring Payments</p>

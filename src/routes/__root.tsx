@@ -2,6 +2,7 @@ import {
   HeadContent,
   Scripts,
   createRootRouteWithContext,
+  useRouterState,
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
@@ -31,10 +32,15 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'spends',
+        title: 'Trytracker',
       },
     ],
     links: [
+      {
+        rel: 'icon',
+        type: 'image/svg+xml',
+        href: '/favicon.svg',
+      },
       {
         rel: 'stylesheet',
         href: appCss,
@@ -45,6 +51,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  })
+  const showDevtools = import.meta.env.DEV
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -53,26 +64,33 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body className="font-sans antialiased [overflow-wrap:anywhere]">
         <TanStackQueryProvider>
           <ConvexClientProvider>
-            <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col">
-              <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[180px_minmax(0,1fr)]">
+            <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col lg:px-4">
+              <div className="relative flex min-h-0 flex-1 flex-col">
                 <Header />
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  {children}
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-[196px] lg:pt-10">
+                  <div
+                    key={pathname}
+                    className="shell-route-enter flex min-h-0 flex-1 flex-col"
+                  >
+                    {children}
+                  </div>
                 </div>
               </div>
             </div>
-            <TanStackDevtools
-              config={{
-                position: 'bottom-right',
-              }}
-              plugins={[
-                {
-                  name: 'Tanstack Router',
-                  render: <TanStackRouterDevtoolsPanel />,
-                },
-                TanStackQueryDevtools,
-              ]}
-            />
+            {showDevtools ? (
+              <TanStackDevtools
+                config={{
+                  position: 'bottom-right',
+                }}
+                plugins={[
+                  {
+                    name: 'Tanstack Router',
+                    render: <TanStackRouterDevtoolsPanel />,
+                  },
+                  TanStackQueryDevtools,
+                ]}
+              />
+            ) : null}
           </ConvexClientProvider>
         </TanStackQueryProvider>
         <Scripts />
