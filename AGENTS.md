@@ -73,11 +73,6 @@ These commands map to their corresponding tools. For example, `vp dev --port 300
 
 - [ ] Run `vp install` after pulling remote changes and before getting started.
 - [ ] Run `vp check` and `vp test` to validate changes.
-
-## Frontend Preferences
-
-- Prefer ordered section-based layouts over card-heavy compositions.
-- Avoid using card components for new UI unless the user explicitly asks for cards or the content clearly needs contained panels.
 <!--VITE PLUS END-->
 
 <!-- convex-ai-start -->

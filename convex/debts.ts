@@ -10,12 +10,6 @@ const debtType = v.union(
 
 const debtStatus = v.union(v.literal('active'), v.literal('closed'))
 
-const planStatus = v.union(
-  v.literal('active'),
-  v.literal('restructured'),
-  v.literal('completed'),
-)
-
 const paymentMode = v.union(v.literal('installments'), v.literal('revolving'))
 
 function deriveDueDay(dueDate: string) {

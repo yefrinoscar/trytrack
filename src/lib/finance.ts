@@ -243,52 +243,16 @@ export interface UpdateRecurringPaymentInput {
 
 const STORAGE_KEY = 'spends.sh:dashboard:v1'
 const DASHBOARD_QUERY_KEY = ['finance-dashboard'] as const
-const CONVEX_USER_STORAGE_KEY = 'spends.sh:convex-user-email'
 
 export const DASHBOARD_SETTINGS_CHANGE_EVENT = 'finance-settings-change'
 
 type ConvexDebtDoc = Doc<'debts'>
 
-function getOrCreateConvexUserEmail() {
-  if (typeof window === 'undefined') {
-    return 'server-preview@spends.local'
-  }
-
-  const existing = window.localStorage.getItem(CONVEX_USER_STORAGE_KEY)
-
-  if (existing) {
-    return existing
-  }
-
-  const generated = `local-${crypto.randomUUID()}@spends.local`
-  window.localStorage.setItem(CONVEX_USER_STORAGE_KEY, generated)
-  return generated
-}
-
 async function getOrCreateConvexUser(
   convex: ReturnType<typeof useConvex>,
   currency = 'USD',
 ) {
-  const email = getOrCreateConvexUserEmail()
-  const existing = await convex.query(api.users.getByEmail, { email })
-
-  if (existing) {
-    return existing
-  }
-
-  await convex.mutation(api.users.create, {
-    email,
-    name: 'Local spends user',
-    currency,
-  })
-
-  const created = await convex.query(api.users.getByEmail, { email })
-
-  if (!created) {
-    throw new Error('Unable to create Convex user')
-  }
-
-  return created
+  return await convex.mutation(api.users.ensureCurrent, { currency })
 }
 
 function toDebtMutationValue(value: Omit<Debt, 'id' | 'createdAt'>) {

@@ -2,28 +2,43 @@ import {
   HeadContent,
   Scripts,
   createRootRouteWithContext,
+  redirect,
+  useRouteContext,
   useRouterState,
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { useEffect } from 'react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
+import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react'
+import { ConvexQueryClient } from '@convex-dev/react-query'
+import { createServerFn } from '@tanstack/react-start'
 import Header from '../components/Header'
 import {
   DASHBOARD_SETTINGS_CHANGE_EVENT,
   getStoredDashboardSettings,
 } from '../lib/finance'
 
-import TanStackQueryProvider from '../integrations/tanstack-query/root-provider'
-import { ConvexClientProvider } from '../integrations/convex'
-
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import appCss from '../styles.css?url'
 
-import type { QueryClient } from '@tanstack/react-query'
+import { authClient } from '#/lib/auth-client'
+import { getToken } from '#/lib/auth-server'
+
+const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
+  return await getToken()
+})
 
 interface MyRouterContext {
   queryClient: QueryClient
+  convexQueryClient: ConvexQueryClient
+}
+
+type RootRouteContext = MyRouterContext & {
+  token?: string | null
+  isAuthenticated?: boolean
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
@@ -58,6 +73,52 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
     ],
   }),
+  beforeLoad: async (opts) => {
+    const pathname = opts.location.pathname
+    const search = opts.location.searchStr ?? ''
+
+    if (pathname.startsWith('/api/auth')) {
+      return {
+        isAuthenticated: false,
+        token: undefined,
+      }
+    }
+
+    const token = await getAuth()
+    if (token) {
+      opts.context.convexQueryClient.serverHttpClient?.setAuth(token)
+    }
+
+    if (pathname.startsWith('/api/')) {
+      return {
+        isAuthenticated: !!token,
+        token,
+      }
+    }
+
+    if (pathname === '/login') {
+      if (token) {
+        throw redirect({ to: '/debts' })
+      }
+      return {
+        isAuthenticated: false,
+        token,
+      }
+    }
+
+    if (!token) {
+      const back = `${pathname}${search}`
+      throw redirect({
+        to: '/login',
+        search: { redirect: back },
+      })
+    }
+
+    return {
+      isAuthenticated: true,
+      token,
+    }
+  },
   shellComponent: RootDocument,
 })
 
@@ -68,6 +129,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   const showDevtools = import.meta.env.DEV
   const initialSettings =
     typeof window === 'undefined' ? null : getStoredDashboardSettings()
+
+  const routeCtx = useRouteContext({ from: Route.id }) as RootRouteContext
+  const { queryClient, convexQueryClient, token } = routeCtx
+  const isLogin = pathname === '/login'
 
   return (
     <html
@@ -80,22 +145,29 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="font-sans antialiased [overflow-wrap:anywhere]">
-        <TanStackQueryProvider>
-          <ConvexClientProvider>
+        <QueryClientProvider client={queryClient}>
+          <ConvexBetterAuthProvider
+            client={convexQueryClient.convexClient}
+            authClient={authClient}
+            initialToken={token ?? null}
+          >
             <DashboardAppearanceSync />
-            <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col lg:px-4">
-              <div className="relative flex min-h-0 flex-1 flex-col">
-                <Header />
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-[236px] lg:pt-10">
-                  <div
-                    key={pathname}
-                    className="shell-route-enter flex min-h-0 flex-1 flex-col"
-                  >
-                    {children}
+            {isLogin ? (
+              <div className="bg-background flex min-h-screen flex-col">
+                {children}
+              </div>
+            ) : (
+              <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col lg:px-4">
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                  <Header />
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-[236px] lg:pt-10">
+                    <div className="shell-route-enter flex min-h-0 flex-1 flex-col">
+                      {children}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
             {showDevtools ? (
               <TanStackDevtools
                 config={{
@@ -110,8 +182,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 ]}
               />
             ) : null}
-          </ConvexClientProvider>
-        </TanStackQueryProvider>
+          </ConvexBetterAuthProvider>
+        </QueryClientProvider>
         <Scripts />
       </body>
     </html>

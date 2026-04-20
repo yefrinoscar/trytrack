@@ -1,42 +1,10 @@
 import type { ReactNode } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-let context:
-  | {
-      queryClient: QueryClient
-    }
-  | undefined
-
-export function getContext() {
-  if (context) {
-    return context
-  }
-
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        refetchOnWindowFocus: false,
-        staleTime: 0,
-        gcTime: 1000 * 60 * 60,
-      },
-    },
-  })
-
-  context = {
-    queryClient,
-  }
-
-  return context
-}
-
+/** @deprecated QueryClient is provided from router context in __root.tsx */
 export default function TanStackQueryProvider({
   children,
 }: {
   children: ReactNode
 }) {
-  const { queryClient } = getContext()
-
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  )
+  return children
 }

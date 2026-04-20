@@ -1,70 +1,62 @@
-// Convex React Query integration hooks
-// These wrappers make it easy to use Convex with TanStack Query
-
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useConvex } from 'convex/react'
 
-// Define the API type since we can't import the generated api during dev
-// This will be replaced with the actual generated api when running convex dev
-const api = {
-  users: {
-    getByEmail: 'users:getByEmail' as const,
-    create: 'users:create' as const,
-  },
-  expenses: {
-    listByUser: 'expenses:listByUser' as const,
-    create: 'expenses:create' as const,
-  },
-  monthlySpend: {
-    getMonthlySpendSummary: 'monthlySpend:getMonthlySpendSummary' as const,
-  },
-} as const
+import { api } from '../../../convex/_generated/api'
+import type { Id } from '../../../convex/_generated/dataModel'
 
-// Example: Get user by email
+/** Signed-in app user row (Convex `users` table), or null if not loaded / no session. */
+export function useCurrentAppUser() {
+  const convex = useConvex()
+
+  return useQuery({
+    queryKey: ['users', 'current'],
+    queryFn: () => convex.query(api.users.current, {}),
+  })
+}
+
+/** @deprecated Prefer {@link useCurrentAppUser}; kept for call sites that still pass email. */
 export function useUser(email: string | undefined) {
   const convex = useConvex()
 
   return useQuery({
     queryKey: ['user', email],
-    queryFn: () => convex.query(api.users.getByEmail as any, { email: email! }),
+    queryFn: () => convex.query(api.users.getByEmail, { email: email! }),
     enabled: !!email,
   })
 }
 
-// Example: Get expenses for user
-export function useExpenses(userId: string | undefined) {
+export function useExpenses(userId: Id<'users'> | undefined) {
   const convex = useConvex()
 
   return useQuery({
     queryKey: ['expenses', userId],
-    queryFn: () => convex.query(api.expenses.listByUser as any, { userId }),
+    queryFn: () => convex.query(api.expenses.listByUser, { userId: userId! }),
     enabled: !!userId,
   })
 }
 
-// Example: Create expense mutation
 export function useCreateExpense() {
   const convex = useConvex()
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (data: {
-      userId: string
+      userId: Id<'users'>
       amount: number
       currency: string
       description: string
       category: string
       merchant?: string
       spentAt: string
-    }) => convex.mutation(api.expenses.create as any, data),
+    }) => convex.mutation(api.expenses.create, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses'] })
+      void queryClient.invalidateQueries({ queryKey: ['expenses'] })
     },
   })
 }
 
 export function useMonthlySpendSummary(
-  userId: string | undefined,
+  userId: Id<'users'> | undefined,
   month: string | undefined,
   currency?: string,
 ) {
@@ -73,9 +65,9 @@ export function useMonthlySpendSummary(
   return useQuery({
     queryKey: ['monthly-spend', userId, month, currency],
     queryFn: () =>
-      convex.query(api.monthlySpend.getMonthlySpendSummary as any, {
-        userId,
-        month,
+      convex.query(api.monthlySpend.getMonthlySpendSummary, {
+        userId: userId!,
+        month: month!,
         currency,
       }),
     enabled: !!userId && !!month,

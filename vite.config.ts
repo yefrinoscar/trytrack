@@ -5,6 +5,7 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
+import { defineConfig, loadEnv } from 'vite'
 
 const lintConfig: any = {
   plugins: ['import', 'typescript'],
@@ -121,65 +122,83 @@ const testDependencies = [
   '@tanstack/react-query',
 ]
 
-const plugins = isTest
-  ? [viteReact()]
-  : [
-      devtools(),
-      nitro({
-        preset: 'cloudflare_module',
-        cloudflare: {
-          deployConfig: true,
-          nodeCompat: true,
-          wrangler: {
-            compatibility_date: '2026-03-19',
-            name: 'trytrack',
-            observability: {
-              logs: {
-                enabled: true,
-                invocation_logs: true,
+export default defineConfig(({ command, mode }) => {
+  const viteEnv = loadEnv(mode, process.cwd(), '')
+
+  const plugins = isTest
+    ? [viteReact()]
+    : [
+        devtools(),
+        tanstackStart(),
+        viteReact(),
+        tailwindcss(),
+        nitro(
+          command === 'serve'
+            ? {
+                preset: 'node',
+                rollupConfig: { external: [/^@sentry\//] },
+              }
+            : {
+                preset: 'cloudflare_module',
+                cloudflare: {
+                  deployConfig: true,
+                  nodeCompat: true,
+                  wrangler: {
+                    compatibility_date: '2026-03-19',
+                    name: 'trytrack',
+                    observability: {
+                      logs: {
+                        enabled: true,
+                        invocation_logs: true,
+                      },
+                    },
+                  },
+                },
+                rollupConfig: { external: [/^@sentry\//] },
               },
-            },
+        ),
+      ]
+
+  return {
+    define: {
+      'process.env.VITE_CONVEX_URL': JSON.stringify(viteEnv.VITE_CONVEX_URL ?? ''),
+      'process.env.VITE_CONVEX_SITE_URL': JSON.stringify(
+        viteEnv.VITE_CONVEX_SITE_URL ?? '',
+      ),
+    },
+    staged: {
+      '*': 'vp check --fix',
+    },
+    lint: lintConfig,
+    fmt: {
+      semi: false,
+      singleQuote: true,
+      trailingComma: 'all',
+      printWidth: 80,
+      sortPackageJson: false,
+      ignorePatterns: ['package-lock.json', 'yarn.lock'],
+    },
+    resolve: {
+      tsconfigPaths: true,
+    },
+    ssr: {
+      noExternal: ['@convex-dev/better-auth'],
+    },
+    test: {
+      environment: 'node',
+      server: {
+        deps: {
+          inline: testDependencies,
+        },
+      },
+      deps: {
+        optimizer: {
+          ssr: {
+            include: testDependencies,
           },
         },
-        rollupConfig: { external: [/^@sentry\//] },
-      }),
-      tailwindcss(),
-      tanstackStart(),
-      viteReact(),
-    ]
-
-const config = {
-  staged: {
-    '*': 'vp check --fix',
-  },
-  lint: lintConfig,
-  fmt: {
-    semi: false,
-    singleQuote: true,
-    trailingComma: 'all',
-    printWidth: 80,
-    sortPackageJson: false,
-    ignorePatterns: ['package-lock.json', 'yarn.lock'],
-  },
-  resolve: {
-    tsconfigPaths: true,
-  },
-  test: {
-    environment: 'node',
-    server: {
-      deps: {
-        inline: testDependencies,
       },
     },
-    deps: {
-      optimizer: {
-        ssr: {
-          include: testDependencies,
-        },
-      },
-    },
-  },
-  plugins,
-}
-
-export default config
+    plugins,
+  }
+})
