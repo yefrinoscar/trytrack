@@ -90,7 +90,9 @@ function LoginPage() {
       }
       window.location.assign(redirect)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Something went wrong')
+      setError(
+        caught instanceof Error ? caught.message : 'Something went wrong',
+      )
     } finally {
       setPending(false)
     }

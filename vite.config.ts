@@ -5,7 +5,8 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
-import { defineConfig } from 'vite'
+import type { PluginOption } from 'vite'
+import { defineConfig } from 'vite-plus'
 
 const lintConfig: any = {
   plugins: ['import', 'typescript'],
@@ -122,8 +123,35 @@ const testDependencies = [
   '@tanstack/react-query',
 ]
 
-export default defineConfig(({ command }) => {
-  const plugins = isTest
+/**
+ * Vite passes `command` in config callbacks, but oxfmt (used by `vp check`) only
+ * accepts a static `export default` object with `fmt` / `lint` — no function form.
+ * Mirror Vite: `serve` for dev and preview, `build` for build/check/etc.
+ */
+function inferViteCommandFromArgv(): 'build' | 'serve' {
+  if (isTest) {
+    return 'build'
+  }
+  const { argv } = process
+  if (argv.includes('dev') || argv.includes('preview')) {
+    return 'serve'
+  }
+  return 'build'
+}
+
+const isServe = inferViteCommandFromArgv() === 'serve'
+
+function normalizePluginOptions(input: PluginOption[]): PluginOption[] {
+  return input.flatMap((item) => {
+    if (item == null || item === false) {
+      return []
+    }
+    return Array.isArray(item) ? item : [item]
+  })
+}
+
+const plugins = normalizePluginOptions(
+  isTest
     ? [viteReact()]
     : [
         devtools(),
@@ -131,7 +159,7 @@ export default defineConfig(({ command }) => {
         viteReact(),
         tailwindcss(),
         nitro(
-          command === 'serve'
+          isServe
             ? {
                 preset: 'node',
                 rollupConfig: { external: [/^@sentry\//] },
@@ -155,42 +183,43 @@ export default defineConfig(({ command }) => {
                 rollupConfig: { external: [/^@sentry\//] },
               },
         ),
-      ]
+      ],
+)
 
-  return {
-    staged: {
-      '*': 'vp check --fix',
-    },
-    lint: lintConfig,
-    fmt: {
-      semi: false,
-      singleQuote: true,
-      trailingComma: 'all',
-      printWidth: 80,
-      sortPackageJson: false,
-      ignorePatterns: ['package-lock.json', 'yarn.lock'],
-    },
-    resolve: {
-      tsconfigPaths: true,
-    },
-    ssr: {
-      noExternal: ['@convex-dev/better-auth'],
-    },
-    test: {
-      environment: 'node',
-      server: {
-        deps: {
-          inline: testDependencies,
-        },
-      },
+// `vp check` tsglint hits deep instantiation limits if this object is fully inferred as Vite+ UserConfig.
+export default defineConfig({
+  staged: {
+    '*': 'vp check --fix',
+  },
+  lint: lintConfig,
+  fmt: {
+    semi: false,
+    singleQuote: true,
+    trailingComma: 'all',
+    printWidth: 80,
+    sortPackageJson: false,
+    ignorePatterns: ['package-lock.json', 'yarn.lock'],
+  },
+  resolve: {
+    tsconfigPaths: true,
+  },
+  ssr: {
+    noExternal: ['@convex-dev/better-auth'],
+  },
+  test: {
+    environment: 'node',
+    server: {
       deps: {
-        optimizer: {
-          ssr: {
-            include: testDependencies,
-          },
+        inline: testDependencies,
+      },
+    },
+    deps: {
+      optimizer: {
+        ssr: {
+          include: testDependencies,
         },
       },
     },
-    plugins,
-  }
-})
+  },
+  plugins,
+} as any)

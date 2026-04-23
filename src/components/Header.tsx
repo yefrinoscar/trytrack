@@ -144,7 +144,10 @@ export default function Header() {
                     className="w-52 rounded-2xl border-border bg-[color-mix(in_srgb,var(--popover)_92%,black)] p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]"
                   >
                     <DropdownMenuItem asChild>
-                      <Link to="/settings" className="cursor-pointer rounded-xl">
+                      <Link
+                        to="/settings"
+                        className="cursor-pointer rounded-xl"
+                      >
                         <Settings className="h-4 w-4" />
                         Configuration
                       </Link>

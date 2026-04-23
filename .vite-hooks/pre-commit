@@ -1,3 +1,1 @@
-# Disabled: Vite+ was running `vp staged` here and blocking commits.
-# Re-enable: https://voidzero.co — or run `vp staged` manually before committing.
-exit 0
+vp staged

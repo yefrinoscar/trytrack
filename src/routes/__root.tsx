@@ -12,7 +12,7 @@ import { useEffect } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react'
-import { ConvexQueryClient } from '@convex-dev/react-query'
+import type { ConvexQueryClient } from '@convex-dev/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import Header from '../components/Header'
 import {
