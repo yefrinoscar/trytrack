@@ -5,7 +5,7 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 
 const lintConfig: any = {
   plugins: ['import', 'typescript'],
@@ -122,9 +122,7 @@ const testDependencies = [
   '@tanstack/react-query',
 ]
 
-export default defineConfig(({ command, mode }) => {
-  const viteEnv = loadEnv(mode, process.cwd(), '')
-
+export default defineConfig(({ command }) => {
   const plugins = isTest
     ? [viteReact()]
     : [
@@ -160,12 +158,6 @@ export default defineConfig(({ command, mode }) => {
       ]
 
   return {
-    define: {
-      'process.env.VITE_CONVEX_URL': JSON.stringify(viteEnv.VITE_CONVEX_URL ?? ''),
-      'process.env.VITE_CONVEX_SITE_URL': JSON.stringify(
-        viteEnv.VITE_CONVEX_SITE_URL ?? '',
-      ),
-    },
     staged: {
       '*': 'vp check --fix',
     },

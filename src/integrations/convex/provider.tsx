@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import { getRequiredConvexUrl } from '#/lib/convex-public-env'
 
-// Convex client - will use CONVEX_URL environment variable
-// In development, set CONVEX_URL in .env.local
-// In production, set it in your deployment platform
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL || '')
+const convex = new ConvexReactClient(getRequiredConvexUrl())
 
 export default function ConvexClientProvider({
   children,

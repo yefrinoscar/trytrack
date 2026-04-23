@@ -120,7 +120,6 @@ export default function Header() {
                 </div>
 
                 <div className="min-w-0 flex-1 pr-1">
-                  <p className="eyebrow mb-1">Account</p>
                   <p className="truncate text-sm font-semibold text-foreground">
                     {displayName}
                   </p>
