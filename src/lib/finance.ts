@@ -757,7 +757,7 @@ function emptyDashboardData(currency = 'USD'): DashboardData {
 }
 
 function normalizeDashboardData(input: unknown): DashboardData {
-  const fallback = cloneDashboardData(seedData)
+  const fallback = emptyDashboardData()
 
   if (!input || typeof input !== 'object') {
     return fallback
@@ -887,37 +887,37 @@ function normalizeDashboardData(input: unknown): DashboardData {
 
 export function getStoredDashboardSettings(): DashboardSettings {
   if (typeof window === 'undefined') {
-    return cloneDashboardData(seedData).settings
+    return emptyDashboardData().settings
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY)
 
   if (!raw) {
-    return cloneDashboardData(seedData).settings
+    return emptyDashboardData().settings
   }
 
   try {
     return normalizeDashboardData(JSON.parse(raw)).settings
   } catch {
-    return cloneDashboardData(seedData).settings
+    return emptyDashboardData().settings
   }
 }
 
 async function readDashboardData(): Promise<DashboardData> {
   if (typeof window === 'undefined') {
-    return cloneDashboardData(seedData)
+    return emptyDashboardData()
   }
 
   const raw = window.localStorage.getItem(STORAGE_KEY)
 
   if (!raw) {
-    return cloneDashboardData(seedData)
+    return emptyDashboardData()
   }
 
   try {
     return normalizeDashboardData(JSON.parse(raw))
   } catch {
-    return cloneDashboardData(seedData)
+    return emptyDashboardData()
   }
 }
 

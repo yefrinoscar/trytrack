@@ -181,6 +181,9 @@ const plugins = normalizePluginOptions(
                         enabled: true,
                         invocation_logs: true,
                       },
+                      traces: {
+                        enabled: false,
+                      },
                     },
                   },
                 },
