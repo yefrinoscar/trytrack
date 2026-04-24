@@ -175,6 +175,7 @@ const plugins = normalizePluginOptions(
                   wrangler: {
                     compatibility_date: '2026-03-19',
                     name: 'trytrack',
+                    no_bundle: false,
                     observability: {
                       logs: {
                         enabled: true,
