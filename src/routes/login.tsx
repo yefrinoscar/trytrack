@@ -35,6 +35,51 @@ function formatAuthError(err: unknown): string {
   }
 }
 
+function authDebugContext(mode: 'signIn' | 'signUp', redirect: string) {
+  return {
+    mode,
+    redirect,
+    pageOrigin: window.location.origin,
+    pageHref: window.location.href,
+    configuredSiteUrl: import.meta.env.VITE_SITE_URL ?? null,
+    convexSiteUrl: import.meta.env.VITE_CONVEX_SITE_URL ?? null,
+    authEndpoint: `${window.location.origin}/api/auth`,
+  }
+}
+
+function logAuthError(
+  mode: 'signIn' | 'signUp',
+  redirect: string,
+  err: unknown,
+) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  const message = formatAuthError(err)
+  console.groupCollapsed(`[auth] ${mode} failed: ${message}`)
+  console.info('Request context', authDebugContext(mode, redirect))
+  console.error('Raw auth error', err)
+  if (message.toLowerCase().includes('invalid origin')) {
+    console.warn(
+      [
+        'Better Auth rejected this request because the browser origin is not trusted by the auth server.',
+        'Make sure the exact URL shown as pageOrigin is included in the Convex auth trusted origins.',
+        'For local dev, SITE_URL/TRUSTED_ORIGINS in the Convex deployment should match the URL and port you opened in the browser.',
+      ].join(' '),
+    )
+  }
+  console.groupEnd()
+}
+
+function logAuthSuccess(mode: 'signIn' | 'signUp', redirect: string) {
+  if (!import.meta.env.DEV) {
+    return
+  }
+
+  console.info(`[auth] ${mode} succeeded`, authDebugContext(mode, redirect))
+}
+
 function safeRedirectPath(candidate: string | undefined): string {
   if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) {
     return '/debts'
@@ -75,6 +120,7 @@ function LoginPage() {
           name: name || email.split('@')[0] || 'User',
         })
         if (err) {
+          logAuthError(mode, redirect, err)
           setError(formatAuthError(err))
           return
         }
@@ -84,12 +130,15 @@ function LoginPage() {
           password,
         })
         if (err) {
+          logAuthError(mode, redirect, err)
           setError(formatAuthError(err))
           return
         }
       }
+      logAuthSuccess(mode, redirect)
       window.location.assign(redirect)
     } catch (caught) {
+      logAuthError(mode, redirect, caught)
       setError(
         caught instanceof Error ? caught.message : 'Something went wrong',
       )

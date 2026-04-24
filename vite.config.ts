@@ -125,7 +125,7 @@ const testDependencies = [
 
 /**
  * Vite passes `command` in config callbacks, but oxfmt (used by `vp check`) only
- * accepts a static `export default` object with `fmt` / `lint` — no function form.
+ * accepts a static `export default` object with `fmt` / `lint` - no function form.
  * Mirror Vite: `serve` for dev and preview, `build` for build/check/etc.
  */
 function inferViteCommandFromArgv(): 'build' | 'serve' {

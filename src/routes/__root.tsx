@@ -28,7 +28,29 @@ import { authClient } from '#/lib/auth-client'
 import { getToken } from '#/lib/auth-server'
 
 const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
-  return await getToken()
+  try {
+    const token = await getToken()
+    console.info('[auth/root] getAuth:ok', {
+      hasToken: Boolean(token),
+    })
+    return token
+  } catch (error) {
+    console.error('[auth/root] getAuth:failed', {
+      error:
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+              stack: error.stack,
+              cause: error.cause,
+            }
+          : error,
+      convexUrl: process.env.VITE_CONVEX_URL ?? null,
+      convexSiteUrl: process.env.VITE_CONVEX_SITE_URL ?? null,
+      siteUrl: process.env.VITE_SITE_URL ?? null,
+    })
+    throw error
+  }
 })
 
 interface MyRouterContext {
