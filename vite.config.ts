@@ -140,6 +140,7 @@ function inferViteCommandFromArgv(): 'build' | 'serve' {
 }
 
 const isServe = inferViteCommandFromArgv() === 'serve'
+const nitroErrorHandler = './src/lib/nitro-error-handler.ts'
 
 function normalizePluginOptions(input: PluginOption[]): PluginOption[] {
   return input.flatMap((item) => {
@@ -162,10 +163,12 @@ const plugins = normalizePluginOptions(
           isServe
             ? {
                 preset: 'node',
+                errorHandler: nitroErrorHandler,
                 rollupConfig: { external: [/^@sentry\//] },
               }
             : {
                 preset: 'cloudflare_module',
+                errorHandler: nitroErrorHandler,
                 cloudflare: {
                   deployConfig: true,
                   nodeCompat: true,

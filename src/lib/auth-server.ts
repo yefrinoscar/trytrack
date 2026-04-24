@@ -76,10 +76,15 @@ export async function handler(request: Request) {
 
     const response = await getHelpers().handler(request)
     if (response.status >= 500) {
+      const responseBody = await response
+        .clone()
+        .text()
+        .catch(() => undefined)
       logServerError('Auth proxy returned an upstream server error', null, {
         ...context,
         status: response.status,
         statusText: response.statusText,
+        responseBody,
       })
     }
     return response
