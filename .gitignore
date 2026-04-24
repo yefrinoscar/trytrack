@@ -11,6 +11,7 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
+.npm-cache
 
 # Convex
 convex/_generated/*
