@@ -1,6 +1,10 @@
 import { createRouter as createTanStackRouter } from '@tanstack/react-router'
-import { QueryClient, notifyManager } from '@tanstack/react-query'
-import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
+import {
+  QueryClient,
+  dehydrate,
+  hydrate,
+  notifyManager,
+} from '@tanstack/react-query'
 import { ConvexQueryClient } from '@convex-dev/react-query'
 import { getRequiredConvexUrl } from '#/lib/convex-public-env'
 import { routeTree } from './routeTree.gen'
@@ -34,10 +38,35 @@ export function getRouter() {
     defaultPreloadStaleTime: 0,
   })
 
-  setupRouterSsrQueryIntegration({
-    router,
-    queryClient,
-  })
+  const ogHydrate = router.options.hydrate
+  const ogDehydrate = router.options.dehydrate
+
+  router.options.dehydrate = async () => {
+    const dehydrated = await ogDehydrate?.()
+    const dehydratedQueryClient = dehydrate(queryClient)
+
+    if (dehydratedQueryClient.queries.length === 0) {
+      return dehydrated
+    }
+
+    return {
+      ...dehydrated,
+      dehydratedQueryClient,
+    }
+  }
+
+  router.options.hydrate = async (dehydrated) => {
+    await ogHydrate?.(dehydrated)
+
+    if (
+      dehydrated &&
+      typeof dehydrated === 'object' &&
+      'dehydratedQueryClient' in dehydrated &&
+      dehydrated.dehydratedQueryClient
+    ) {
+      hydrate(queryClient, dehydrated.dehydratedQueryClient)
+    }
+  }
 
   return router
 }
