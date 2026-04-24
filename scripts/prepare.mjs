@@ -1,12 +1,18 @@
 import { spawnSync } from 'node:child_process'
 
 const isCi =
-  process.env.CI === 'true' ||
-  process.env.CF_PAGES === '1' ||
+  process.env.CI !== undefined ||
+  process.env.CF_PAGES !== undefined ||
+  process.env.CF_BUILD_ID !== undefined ||
+  process.env.CLOUDFLARE_ACCOUNT_ID !== undefined ||
   process.env.CLOUDFLARE_ENV !== undefined
 
-if (isCi) {
-  console.log('Skipping vp config during CI dependency install.')
+const isInteractive = process.stdout.isTTY === true
+const shouldRunVpConfig =
+  process.env.FORCE_VP_CONFIG === '1' || (!isCi && isInteractive)
+
+if (!shouldRunVpConfig) {
+  console.log('Skipping vp config during non-interactive dependency install.')
   process.exit(0)
 }
 
