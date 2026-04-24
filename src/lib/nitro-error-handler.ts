@@ -31,14 +31,29 @@ export default async function nitroErrorHandler(
   event: unknown,
 ) {
   const errorId = crypto.randomUUID()
+  const request = getRequestContext(event)
+  const serializedError = serializeError(error)
 
   console.error(
     JSON.stringify({
       level: 'error',
       message: 'Unhandled Nitro error',
       errorId,
-      request: getRequestContext(event),
-      error: serializeError(error),
+      request,
+      error: serializedError,
     }),
+  )
+
+  return Response.json(
+    {
+      status: 500,
+      unhandled: true,
+      message: 'Unhandled Nitro error',
+      errorId,
+      request,
+      error: serializedError,
+      hint: 'Search Cloudflare logs for this errorId. This response is intentionally verbose so deployment/runtime failures are diagnosable.',
+    },
+    { status: 500 },
   )
 }

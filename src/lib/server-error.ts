@@ -7,6 +7,8 @@ type ErrorLike = {
   code?: unknown
   error?: unknown
   cause?: unknown
+  data?: unknown
+  body?: unknown
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -65,9 +67,15 @@ export function serializeError(error: unknown, depth = 0): unknown {
     'statusText',
     'code',
     'stack',
+    'data',
+    'body',
   ] as const) {
     const value = errorLike[key]
-    if (typeof value === 'string' || typeof value === 'number') {
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    ) {
       serialized[key] = value
     }
   }
@@ -77,6 +85,8 @@ export function serializeError(error: unknown, depth = 0): unknown {
   }
   if (isObject(errorLike.cause)) {
     serialized.cause = serializeError(errorLike.cause, depth + 1)
+  } else if (typeof errorLike.cause === 'string') {
+    serialized.cause = errorLike.cause
   }
   if (isObject(error.response)) {
     serialized.response = {

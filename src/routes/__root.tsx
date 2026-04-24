@@ -26,6 +26,25 @@ import appCss from '../styles.css?url'
 
 import { authClient } from '#/lib/auth-client'
 import { getToken } from '#/lib/auth-server'
+import { serializeError } from '#/lib/server-error'
+
+type AuthDiagnostic = {
+  errorId: string
+  stage: string
+  message: string
+  errorJson: string
+  env: {
+    convexUrl: string | null
+    convexSiteUrl: string | null
+    siteUrl: string | null
+  }
+  likelyCauses: string[]
+}
+
+type AuthResult = {
+  token: string | null | undefined
+  error: AuthDiagnostic | null
+}
 
 const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
   try {
@@ -33,23 +52,39 @@ const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
     console.info('[auth/root] getAuth:ok', {
       hasToken: Boolean(token),
     })
-    return token
+    return {
+      token,
+      error: null,
+    } satisfies AuthResult
   } catch (error) {
-    console.error('[auth/root] getAuth:failed', {
-      error:
+    const errorId = crypto.randomUUID()
+    const details: AuthDiagnostic = {
+      errorId,
+      stage: 'root.getAuth',
+      message:
         error instanceof Error
-          ? {
-              name: error.name,
-              message: error.message,
-              stack: error.stack,
-              cause: error.cause,
-            }
-          : error,
-      convexUrl: process.env.VITE_CONVEX_URL ?? null,
-      convexSiteUrl: process.env.VITE_CONVEX_SITE_URL ?? null,
-      siteUrl: process.env.VITE_SITE_URL ?? null,
+          ? error.message
+          : 'Auth token lookup failed before rendering the route.',
+      errorJson: JSON.stringify(serializeError(error), null, 2),
+      env: {
+        convexUrl: import.meta.env.VITE_CONVEX_URL || null,
+        convexSiteUrl: import.meta.env.VITE_CONVEX_SITE_URL || null,
+        siteUrl: import.meta.env.VITE_SITE_URL || null,
+      },
+      likelyCauses: [
+        'VITE_CONVEX_SITE_URL is missing, points to .convex.cloud, or points to the app host instead of the .convex.site HTTP Actions URL.',
+        'VITE_CONVEX_URL / VITE_CONVEX_SITE_URL were not available at Cloudflare build time, so Vite inlined empty values.',
+        'The Convex Better Auth HTTP action is returning a 500/4xx. Check Cloudflare logs for the same errorId and Convex logs for the upstream request.',
+      ],
+    }
+
+    console.error('[auth/root] getAuth:failed', {
+      ...details,
     })
-    throw error
+    return {
+      token: null,
+      error: details,
+    } satisfies AuthResult
   }
 })
 
@@ -61,6 +96,7 @@ interface MyRouterContext {
 type RootRouteContext = MyRouterContext & {
   token?: string | null
   isAuthenticated?: boolean
+  authError?: AuthDiagnostic | null
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
@@ -103,10 +139,20 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       return {
         isAuthenticated: false,
         token: undefined,
+        authError: null,
       }
     }
 
-    const token = await getAuth()
+    const auth = await getAuth()
+    const token = auth.token
+    if (auth.error) {
+      return {
+        isAuthenticated: false,
+        token: null,
+        authError: auth.error,
+      }
+    }
+
     if (token) {
       opts.context.convexQueryClient.serverHttpClient?.setAuth(token)
     }
@@ -115,6 +161,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       return {
         isAuthenticated: !!token,
         token,
+        authError: null,
       }
     }
 
@@ -125,6 +172,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       return {
         isAuthenticated: false,
         token,
+        authError: null,
       }
     }
 
@@ -139,6 +187,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     return {
       isAuthenticated: true,
       token,
+      authError: null,
     }
   },
   shellComponent: RootDocument,
@@ -153,7 +202,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     typeof window === 'undefined' ? null : getStoredDashboardSettings()
 
   const routeCtx = useRouteContext({ from: Route.id }) as RootRouteContext
-  const { queryClient, convexQueryClient, token } = routeCtx
+  const { queryClient, convexQueryClient, token, authError } = routeCtx
   const isLogin = pathname === '/login'
 
   return (
@@ -174,7 +223,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             initialToken={token ?? null}
           >
             <DashboardAppearanceSync />
-            {isLogin ? (
+            {authError ? (
+              <AuthFailure error={authError} />
+            ) : isLogin ? (
               <div className="bg-background flex min-h-screen flex-col">
                 {children}
               </div>
@@ -209,6 +260,54 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <Scripts />
       </body>
     </html>
+  )
+}
+
+function AuthFailure({ error }: { error: NonNullable<RootRouteContext['authError']> }) {
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-[980px] flex-col justify-center px-6 py-12">
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-sm font-medium">
+            Authentication failed before the page could render
+          </p>
+          <h1 className="text-foreground text-2xl font-semibold">
+            {error.message}
+          </h1>
+        </div>
+        <div className="rounded-md border border-border bg-sidebar/40 p-4">
+          <dl className="grid gap-3 text-sm sm:grid-cols-[160px_1fr]">
+            <dt className="text-muted-foreground">Error ID</dt>
+            <dd className="font-mono text-foreground">{error.errorId}</dd>
+            <dt className="text-muted-foreground">Stage</dt>
+            <dd className="font-mono text-foreground">{error.stage}</dd>
+            <dt className="text-muted-foreground">Convex URL</dt>
+            <dd className="font-mono text-foreground">
+              {error.env.convexUrl ?? 'missing'}
+            </dd>
+            <dt className="text-muted-foreground">Convex site URL</dt>
+            <dd className="font-mono text-foreground">
+              {error.env.convexSiteUrl ?? 'missing'}
+            </dd>
+            <dt className="text-muted-foreground">Site URL</dt>
+            <dd className="font-mono text-foreground">
+              {error.env.siteUrl ?? 'missing'}
+            </dd>
+          </dl>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold">Likely causes</h2>
+          <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+            {error.likelyCauses.map((cause) => (
+              <li key={cause}>{cause}</li>
+            ))}
+          </ul>
+        </div>
+        <pre className="max-h-[360px] overflow-auto rounded-md border border-border bg-background p-4 text-xs text-foreground">
+          {error.errorJson}
+        </pre>
+      </div>
+    </main>
   )
 }
 

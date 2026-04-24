@@ -140,7 +140,13 @@ export async function handler(request: Request) {
         unhandled: true,
         message: 'Auth proxy failed',
         errorId,
-        ...(import.meta.env.DEV ? { error: serializeError(error) } : {}),
+        context,
+        error: serializeError(error),
+        likelyCauses: [
+          'VITE_CONVEX_SITE_URL is missing, points to .convex.cloud, or points to the app host instead of the .convex.site HTTP Actions URL.',
+          'The Convex Better Auth HTTP action returned an upstream error.',
+          'SITE_URL/TRUSTED_ORIGINS in Convex do not include the exact app origin.',
+        ],
       },
       { status: 500 },
     )
