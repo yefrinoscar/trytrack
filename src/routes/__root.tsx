@@ -27,6 +27,7 @@ import appCss from '../styles.css?url'
 import { authClient } from '#/lib/auth-client'
 import { getToken } from '#/lib/auth-server'
 import { serializeError } from '#/lib/server-error'
+import { logError, logInfo } from '#/lib/server-logger'
 
 type AuthDiagnostic = {
   errorId: string
@@ -49,8 +50,10 @@ type AuthResult = {
 const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
   try {
     const token = await getToken()
-    console.info('[auth/root] getAuth:ok', {
-      hasToken: Boolean(token),
+    logInfo({
+      event: 'auth.root.get_auth_succeeded',
+      message: 'Root loader auth resolved',
+      context: { hasToken: Boolean(token) },
     })
     return {
       token,
@@ -78,8 +81,15 @@ const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
       ],
     }
 
-    console.error('[auth/root] getAuth:failed', {
-      ...details,
+    logError({
+      event: 'auth.root.get_auth_failed',
+      message: 'Root loader auth lookup failed',
+      error,
+      context: {
+        errorId,
+        stage: details.stage,
+        env: details.env,
+      },
     })
     return {
       token: null,
@@ -165,12 +175,15 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       }
     }
 
-    if (pathname === '/login') {
-      if (token) {
+    const publicRoutes = ['/login', '/forgot-password', '/reset-password']
+    const isPublicRoute = publicRoutes.includes(pathname)
+
+    if (isPublicRoute) {
+      if (token && pathname === '/login') {
         throw redirect({ to: '/debts' })
       }
       return {
-        isAuthenticated: false,
+        isAuthenticated: Boolean(token),
         token,
         authError: null,
       }
@@ -203,7 +216,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
   const routeCtx = useRouteContext({ from: Route.id }) as RootRouteContext
   const { queryClient, convexQueryClient, token, authError } = routeCtx
-  const isLogin = pathname === '/login'
+  const authLayoutRoutes = ['/login', '/forgot-password', '/reset-password']
+  const isAuthLayout = authLayoutRoutes.includes(pathname)
 
   return (
     <html
@@ -225,7 +239,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             <DashboardAppearanceSync />
             {authError ? (
               <AuthFailure error={authError} />
-            ) : isLogin ? (
+            ) : isAuthLayout ? (
               <div className="bg-background flex min-h-screen flex-col">
                 {children}
               </div>
@@ -263,7 +277,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   )
 }
 
-function AuthFailure({ error }: { error: NonNullable<RootRouteContext['authError']> }) {
+function AuthFailure({
+  error,
+}: {
+  error: NonNullable<RootRouteContext['authError']>
+}) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[980px] flex-col justify-center px-6 py-12">
       <div className="space-y-5">

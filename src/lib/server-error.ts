@@ -107,18 +107,3 @@ export function serializeError(error: unknown, depth = 0): unknown {
 
   return serialized
 }
-
-export function logServerError(
-  message: string,
-  error: unknown,
-  context: Record<string, unknown> = {},
-) {
-  console.error(
-    JSON.stringify({
-      level: 'error',
-      message,
-      context,
-      error: serializeError(error),
-    }),
-  )
-}
