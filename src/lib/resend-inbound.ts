@@ -53,6 +53,22 @@ type ResendWebhookEvent =
       data?: unknown
     }
 
+type RuntimeGlobal = typeof globalThis & {
+  __env__?: Record<string, unknown>
+}
+
+function getRuntimeEnv(name: string) {
+  const processValue = process.env[name]
+
+  if (processValue) {
+    return processValue
+  }
+
+  const cloudflareValue = (globalThis as RuntimeGlobal).__env__?.[name]
+
+  return typeof cloudflareValue === 'string' ? cloudflareValue : undefined
+}
+
 function timingSafeEqual(left: string, right: string) {
   const leftBytes = new TextEncoder().encode(left)
   const rightBytes = new TextEncoder().encode(right)
@@ -125,7 +141,7 @@ async function createSvixSignature({
 }
 
 async function verifyResendSignature(request: Request, payload: string) {
-  const secret = process.env.RESEND_WEBHOOK_SECRET
+  const secret = getRuntimeEnv('RESEND_WEBHOOK_SECRET')
 
   if (!secret) {
     logWarn({
@@ -200,7 +216,7 @@ function summarizeRetrievedEmail(email: ResendReceivedEmail | null) {
 }
 
 async function retrieveReceivedEmail(emailId: string, request: Request) {
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = getRuntimeEnv('RESEND_API_KEY')
 
   if (!apiKey) {
     logWarn({
