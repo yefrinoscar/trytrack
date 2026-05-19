@@ -57,11 +57,26 @@ type RuntimeGlobal = typeof globalThis & {
   __env__?: Record<string, unknown>
 }
 
-function getRuntimeEnv(name: string) {
+type CloudflareRuntimeRequest = Request & {
+  runtime?: {
+    cloudflare?: {
+      env?: Record<string, unknown>
+    }
+  }
+}
+
+function getRuntimeEnv(name: string, request?: Request) {
   const processValue = process.env[name]
 
   if (processValue) {
     return processValue
+  }
+
+  const requestValue = (request as CloudflareRuntimeRequest | undefined)
+    ?.runtime?.cloudflare?.env?.[name]
+
+  if (typeof requestValue === 'string') {
+    return requestValue
   }
 
   const cloudflareValue = (globalThis as RuntimeGlobal).__env__?.[name]
@@ -141,7 +156,7 @@ async function createSvixSignature({
 }
 
 async function verifyResendSignature(request: Request, payload: string) {
-  const secret = getRuntimeEnv('RESEND_WEBHOOK_SECRET')
+  const secret = getRuntimeEnv('RESEND_WEBHOOK_SECRET', request)
 
   if (!secret) {
     logWarn({
@@ -216,7 +231,7 @@ function summarizeRetrievedEmail(email: ResendReceivedEmail | null) {
 }
 
 async function retrieveReceivedEmail(emailId: string, request: Request) {
-  const apiKey = getRuntimeEnv('RESEND_API_KEY')
+  const apiKey = getRuntimeEnv('RESEND_API_KEY', request)
 
   if (!apiKey) {
     logWarn({
