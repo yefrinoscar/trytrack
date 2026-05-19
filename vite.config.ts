@@ -77,6 +77,7 @@ export default defineConfig({
                   nodeCompat: true,
                   wrangler: {
                     compatibility_date: '2026-03-19',
+                    keep_vars: true,
                     name: 'trytrack',
                     no_bundle: false,
                     observability: {
