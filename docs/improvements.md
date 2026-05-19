@@ -17,6 +17,8 @@ Recommended behavior:
 - Store the original sender, subject, received date, and raw snippet for audit.
 - Deduplicate emails by provider message id and normalized transaction fields.
 - Show parsing errors in the app instead of silently dropping emails.
+- Keep the inbound webhook separated from expense confirmation so email parsing
+  mistakes never create confirmed spending automatically.
 
 Possible providers:
 
