@@ -170,6 +170,10 @@ pre code {
   margin-inline: auto;
 }
 
+.debts-page-wrap {
+  width: min(1280px, calc(100% - 0.5rem));
+}
+
 .page-wrap,
 .page-wrap * {
   user-select: text;

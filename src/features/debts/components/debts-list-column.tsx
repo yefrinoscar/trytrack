@@ -16,12 +16,14 @@ import { DebtListItem } from './debt-list-item'
 interface DebtsListColumnProps {
   debts: Debt[]
   defaultCurrency: string
+  enabledCurrencies: string[]
   actions: FinanceActions
 }
 
 export function DebtsListColumn({
   debts,
   defaultCurrency,
+  enabledCurrencies,
   actions,
 }: DebtsListColumnProps) {
   const {
@@ -35,17 +37,22 @@ export function DebtsListColumn({
     openCreateDebtForm,
     openEditDebtForm,
     payNextInstallment,
+    undoDebtPayment,
+    setInstallmentAmount,
+    paymentActionError,
     removeDebt,
     showCreateDebt,
+    createDebtError,
     submitCreateDebt,
   } = useDebtsListColumn({
     actions,
     debts,
     defaultCurrency,
+    enabledCurrencies,
   })
 
   return (
-    <div className="inline-block w-[320px] align-top rounded-[1.1rem] border border-border bg-card p-3 sm:p-3.5">
+    <div className="w-full rounded-[1.1rem] border border-border bg-card p-3 sm:p-3.5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <p className="eyebrow">Debts</p>
@@ -95,6 +102,7 @@ export function DebtsListColumn({
             <DebtEditor
               busy={actions.isWorking}
               initialDraft={debtToDraft(editingDebt)}
+              enabledCurrencies={enabledCurrencies}
               mode="edit"
               onFieldCommit={commitEditField}
             />
@@ -103,7 +111,14 @@ export function DebtsListColumn({
                 busy={actions.isWorking}
                 debt={editingDebt}
                 onPayNext={payNextInstallment}
+                onUndoPayment={undoDebtPayment}
+                onSetInstallmentAmount={setInstallmentAmount}
               />
+              {paymentActionError ? (
+                <p className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {paymentActionError}
+                </p>
+              ) : null}
             </div>
           </DialogContent>
         </Dialog>
@@ -123,8 +138,10 @@ export function DebtsListColumn({
           <DebtEditor
             busy={actions.isWorking}
             initialDraft={createInitialDraft}
+            enabledCurrencies={enabledCurrencies}
             mode="create"
             onCancel={closeCreateDebtForm}
+            submitError={createDebtError}
             onSubmit={submitCreateDebt}
           />
         </DialogContent>

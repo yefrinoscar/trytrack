@@ -1,6 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { CircleSlash, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,35 +15,50 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet'
-import { RecurringPaymentForm } from './recurring-payment-form'
+import { RecurringPaymentEditor } from './recurring-payment-form'
 import {
   AnimatedCurrencyValue,
   sortByDateAscending,
 } from '@/features/finance/shared'
 import type { FinanceActions } from '@/features/finance/shared'
 import type { RecurringPayment } from '@/lib/finance'
+import { useRecurringPaymentsColumn } from '../hooks/use-recurring-payments-column'
+import { recurringPaymentToDraft } from '../utils/recurring-payment-draft'
 
 interface RecurringPaymentsColumnProps {
   recurringPayments: RecurringPayment[]
   defaultCurrency: string
+  enabledCurrencies: string[]
   actions: FinanceActions
 }
 
 export function RecurringPaymentsColumn({
   recurringPayments,
   defaultCurrency,
+  enabledCurrencies,
   actions,
 }: RecurringPaymentsColumnProps) {
-  const [showPaymentSheet, setShowPaymentSheet] = useState(false)
-  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null)
+  const {
+    cancelPayment,
+    closeCreateForm,
+    closeEditForm,
+    commitEditField,
+    createError,
+    createInitialDraft,
+    editingPayment,
+    editingPaymentId,
+    openCreateForm,
+    openEditForm,
+    reactivatePayment,
+    removePayment,
+    showCreateForm,
+    submitCreatePayment,
+  } = useRecurringPaymentsColumn({
+    actions,
+    recurringPayments,
+    defaultCurrency,
+    enabledCurrencies,
+  })
 
   const sortedRecurringPayments = useMemo(
     () => sortByDateAscending(recurringPayments, (item) => item.startDate),
@@ -96,25 +118,8 @@ export function RecurringPaymentsColumn({
     ].filter((section) => section.items.length > 0)
   }, [sortedRecurringPayments])
 
-  const editingPayment =
-    recurringPayments.find((payment) => payment.id === editingPaymentId) ?? null
-
-  function openNewRecurringForm() {
-    setEditingPaymentId(null)
-    setShowPaymentSheet(true)
-  }
-
-  function openEditRecurringForm(paymentId: string) {
-    setEditingPaymentId(paymentId)
-    setShowPaymentSheet(true)
-  }
-
-  function closeRecurringForm() {
-    setShowPaymentSheet(false)
-    setEditingPaymentId(null)
-  }
   return (
-    <div className="inline-block align-top w-[320px] rounded-[1.1rem] border border-border bg-card p-3 sm:p-3.5">
+    <div className="w-full rounded-[1.1rem] border border-border bg-card p-3 sm:p-3.5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <p className="eyebrow">Recurring Payments</p>
@@ -122,62 +127,13 @@ export function RecurringPaymentsColumn({
             Monthly subscriptions
           </h2>
         </div>
-        <Sheet
-          open={showPaymentSheet}
-          onOpenChange={(open) => {
-            if (!open) {
-              closeRecurringForm()
-              return
-            }
-
-            setShowPaymentSheet(true)
-          }}
+        <button
+          type="button"
+          className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-sm font-medium transition hover:bg-muted"
+          onClick={showCreateForm ? closeCreateForm : openCreateForm}
         >
-          <SheetTrigger asChild>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={openNewRecurringForm}
-            >
-              New
-            </Button>
-          </SheetTrigger>
-          <SheetContent className="w-full sm:max-w-md">
-            <SheetHeader>
-              <SheetTitle>
-                {editingPayment
-                  ? 'Edit recurring payment'
-                  : 'New recurring payment'}
-              </SheetTitle>
-              <SheetDescription>
-                {editingPayment
-                  ? 'Update amount, dates, currency, or status.'
-                  : 'Add a recurring payment in a few fields.'}
-              </SheetDescription>
-            </SheetHeader>
-            <div className="mt-6">
-              <RecurringPaymentForm
-                busy={actions.isWorking}
-                defaultCurrency={defaultCurrency}
-                initialValue={editingPayment}
-                submitLabel={editingPayment ? 'Save changes' : 'Add payment'}
-                onCancel={closeRecurringForm}
-                onSubmit={async (value) => {
-                  if (editingPayment) {
-                    await actions.updateRecurringPayment({
-                      id: editingPayment.id,
-                      value,
-                    })
-                  } else {
-                    await actions.createRecurringPayment(value)
-                  }
-
-                  closeRecurringForm()
-                }}
-              />
-            </div>
-          </SheetContent>
-        </Sheet>
+          {showCreateForm ? 'Close' : 'New'}
+        </button>
       </div>
 
       {recurringPaymentSections.length ? (
@@ -240,11 +196,11 @@ export function RecurringPaymentsColumn({
                     <div
                       key={payment.id}
                       className={`cursor-pointer rounded-lg p-2.5 transition-colors ${paymentCardClassName}`}
-                      onClick={() => openEditRecurringForm(payment.id)}
+                      onClick={() => openEditForm(payment.id)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
-                          openEditRecurringForm(payment.id)
+                          openEditForm(payment.id)
                         }
                       }}
                       role="button"
@@ -295,7 +251,7 @@ export function RecurringPaymentsColumn({
                             <DropdownMenuItem
                               onClick={(event) => {
                                 event.stopPropagation()
-                                openEditRecurringForm(payment.id)
+                                openEditForm(payment.id)
                               }}
                             >
                               <Pencil className="h-4 w-4" />
@@ -305,12 +261,7 @@ export function RecurringPaymentsColumn({
                               className="text-danger"
                               onClick={(event) => {
                                 event.stopPropagation()
-                                void actions.updateRecurringPayment({
-                                  id: payment.id,
-                                  value: {
-                                    status: 'cancelled',
-                                  },
-                                })
+                                cancelPayment(payment.id)
                               }}
                               disabled={isCancelled}
                             >
@@ -321,12 +272,7 @@ export function RecurringPaymentsColumn({
                               <DropdownMenuItem
                                 onClick={(event) => {
                                   event.stopPropagation()
-                                  void actions.updateRecurringPayment({
-                                    id: payment.id,
-                                    value: {
-                                      status: 'active',
-                                    },
-                                  })
+                                  reactivatePayment(payment.id)
                                 }}
                               >
                                 <Play className="h-4 w-4" />
@@ -340,9 +286,7 @@ export function RecurringPaymentsColumn({
                                   className="text-danger"
                                   onClick={(event) => {
                                     event.stopPropagation()
-                                    void actions.removeRecurringPayment(
-                                      payment.id,
-                                    )
+                                    removePayment(payment.id)
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -372,6 +316,54 @@ export function RecurringPaymentsColumn({
           </div>
         </div>
       )}
+
+      {editingPayment ? (
+        <Dialog
+          open={Boolean(editingPaymentId)}
+          onOpenChange={(open) => !open && closeEditForm()}
+        >
+          <DialogContent className="max-h-[92vh] overflow-y-auto p-5 sm:p-6">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Edit recurring payment</DialogTitle>
+              <DialogDescription>
+                Adjust amount, schedule, currency, and status in one view.
+              </DialogDescription>
+            </DialogHeader>
+            <RecurringPaymentEditor
+              busy={actions.isWorking}
+              initialDraft={recurringPaymentToDraft(editingPayment)}
+              enabledCurrencies={enabledCurrencies}
+              defaultCurrency={defaultCurrency}
+              mode="edit"
+              onFieldCommit={commitEditField}
+            />
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      <Dialog
+        open={showCreateForm}
+        onOpenChange={(open) => !open && closeCreateForm()}
+      >
+        <DialogContent className="max-h-[92vh] overflow-y-auto p-5 sm:p-6">
+          <DialogHeader className="sr-only">
+            <DialogTitle>New recurring payment</DialogTitle>
+            <DialogDescription>
+              Create a recurring payment with amount, due day, and start date.
+            </DialogDescription>
+          </DialogHeader>
+          <RecurringPaymentEditor
+            busy={actions.isWorking}
+            initialDraft={createInitialDraft}
+            enabledCurrencies={enabledCurrencies}
+            defaultCurrency={defaultCurrency}
+            mode="create"
+            onCancel={closeCreateForm}
+            submitError={createError}
+            onSubmit={submitCreatePayment}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -15,41 +15,64 @@ export function useDebtsListColumn({
   actions,
   debts,
   defaultCurrency,
+  enabledCurrencies,
 }: {
   actions: FinanceActions
   debts: Debt[]
   defaultCurrency: string
+  enabledCurrencies: string[]
 }) {
+  const preferredCurrency = enabledCurrencies.includes(defaultCurrency)
+    ? defaultCurrency
+    : (enabledCurrencies[0] ?? defaultCurrency)
   const [showCreateDebt, setShowCreateDebt] = useState(false)
   const [editingDebtId, setEditingDebtId] = useState<string | null>(null)
+  const [createDebtError, setCreateDebtError] = useState<string | null>(null)
+  const [paymentActionError, setPaymentActionError] = useState<string | null>(
+    null,
+  )
   const [createInitialDraft, setCreateInitialDraft] = useState<DebtDraft>(() =>
-    createEmptyDebtDraft(defaultCurrency),
+    createEmptyDebtDraft(preferredCurrency),
   )
 
-  const debtScope = useMemo(() => {
-    const debtsInDefaultCurrency = debts.filter(
-      (debt) => debt.currency === defaultCurrency,
-    )
+  const debtScope = useMemo(
+    () =>
+      [...debts].sort((left, right) => {
+        const leftClosed = left.status === 'closed' || left.balance <= 0
+        const rightClosed = right.status === 'closed' || right.balance <= 0
 
-    return debtsInDefaultCurrency.length ? debtsInDefaultCurrency : debts
-  }, [debts, defaultCurrency])
+        if (leftClosed !== rightClosed) {
+          return leftClosed ? 1 : -1
+        }
+
+        return (
+          +new Date(`${left.dueDate}T00:00:00`) -
+          +new Date(`${right.dueDate}T00:00:00`)
+        )
+      }),
+    [debts],
+  )
 
   const editingDebt = debts.find((debt) => debt.id === editingDebtId) ?? null
 
   const openCreateDebtForm = useCallback(() => {
-    setCreateInitialDraft(createEmptyDebtDraft(defaultCurrency))
+    setCreateInitialDraft(createEmptyDebtDraft(preferredCurrency))
+    setCreateDebtError(null)
     setShowCreateDebt(true)
-  }, [defaultCurrency])
+  }, [preferredCurrency])
 
   const openEditDebtForm = useCallback((debtId: string) => {
+    setPaymentActionError(null)
     setEditingDebtId(debtId)
   }, [])
 
   const closeCreateDebtForm = useCallback(() => {
+    setCreateDebtError(null)
     setShowCreateDebt(false)
   }, [])
 
   const closeEditDebtForm = useCallback(() => {
+    setPaymentActionError(null)
     setEditingDebtId(null)
   }, [])
 
@@ -64,8 +87,45 @@ export function useDebtsListColumn({
   )
 
   const payNextInstallment = useCallback(
-    async (debtId: string) => {
-      await actions.payDebtInstallment({ debtId })
+    async (debtId: string, expectedInstallmentNumber: number) => {
+      setPaymentActionError(null)
+      try {
+        await actions.payDebtInstallment({ debtId, expectedInstallmentNumber })
+      } catch (error) {
+        setPaymentActionError(getErrorMessage(error))
+      }
+    },
+    [actions],
+  )
+
+  const undoDebtPayment = useCallback(
+    async (debtId: string, paymentId: string) => {
+      setPaymentActionError(null)
+      try {
+        await actions.undoDebtPayment({ debtId, paymentId })
+      } catch (error) {
+        setPaymentActionError(getErrorMessage(error))
+      }
+    },
+    [actions],
+  )
+
+  const setInstallmentAmount = useCallback(
+    async (
+      debtId: string,
+      amount: number,
+      expectedInstallmentNumber: number,
+    ) => {
+      setPaymentActionError(null)
+      try {
+        await actions.payCustomAmount({
+          debtId,
+          amountPaid: amount,
+          expectedInstallmentNumber,
+        })
+      } catch (error) {
+        setPaymentActionError(getErrorMessage(error))
+      }
     },
     [actions],
   )
@@ -116,16 +176,30 @@ export function useDebtsListColumn({
 
   const submitCreateDebt = useCallback(
     async (draft: DebtDraft) => {
-      const value = draftToDebtValue(draft, defaultCurrency)
+      const validationError = validateCreateDebtDraft(
+        draft,
+        defaultCurrency,
+        enabledCurrencies,
+      )
 
-      if (!value.name.trim()) {
+      if (validationError) {
+        setCreateDebtError(validationError)
         return
       }
 
-      await actions.createItem({ kind: 'debts', value })
+      const value = draftToDebtValue(draft, defaultCurrency)
+
+      setCreateDebtError(null)
+
       closeCreateDebtForm()
+
+      void actions.createItem({ kind: 'debts', value }).catch((error) => {
+        setCreateInitialDraft(draft)
+        setCreateDebtError(getErrorMessage(error))
+        setShowCreateDebt(true)
+      })
     },
-    [actions, closeCreateDebtForm, defaultCurrency],
+    [actions, closeCreateDebtForm, defaultCurrency, enabledCurrencies],
   )
 
   return {
@@ -139,8 +213,48 @@ export function useDebtsListColumn({
     openCreateDebtForm,
     openEditDebtForm,
     payNextInstallment,
+    undoDebtPayment,
+    setInstallmentAmount,
     removeDebt,
+    paymentActionError,
     showCreateDebt,
+    createDebtError,
     submitCreateDebt,
   }
+}
+
+function validateCreateDebtDraft(
+  draft: DebtDraft,
+  defaultCurrency: string,
+  enabledCurrencies: string[],
+) {
+  const normalizedCurrency = (
+    draft.currency.trim() || defaultCurrency
+  ).toUpperCase()
+
+  if (!draft.name.trim()) {
+    return 'Debt name is required.'
+  }
+
+  if (parseMoney(draft.balance) <= 0) {
+    return 'Debt amount must be greater than 0.'
+  }
+
+  if (!enabledCurrencies.includes(normalizedCurrency)) {
+    return 'Currency not enabled. Enable it in Configuration first.'
+  }
+
+  return null
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error
+  }
+
+  return 'Could not update this payment. Please try again.'
 }

@@ -48,6 +48,10 @@ export function debtToDraft(debt: Debt): DebtDraft {
     rate: String(debt.rate),
     payments: String(debt.payments ?? 1),
     dueDate: debt.dueDate,
+    originalBalance:
+      typeof debt.originalBalance === 'number'
+        ? formatAmountInputValue(String(debt.originalBalance))
+        : undefined,
   }
 }
 

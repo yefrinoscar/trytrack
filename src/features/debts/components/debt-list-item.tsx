@@ -19,7 +19,7 @@ export const DebtListItem = memo(function DebtListItem({
 }: {
   debt: Debt
   onOpenEdit: (debtId: string) => void
-  onPayNext: (debtId: string) => void
+  onPayNext: (debtId: string, expectedInstallmentNumber: number) => void
   onRemove: (debtId: string) => void
 }) {
   const { nextInstallmentNumber, paidCount, totalDebt, totalInstallments } =
@@ -32,10 +32,13 @@ export const DebtListItem = memo(function DebtListItem({
   const dueDay = dueDateObj.getDate()
   const canPayNext =
     debt.status !== 'closed' && nextInstallmentNumber <= totalInstallments
+  const isClosed = debt.status === 'closed' || debt.balance <= 0
 
   return (
     <div
-      className="cursor-pointer rounded-lg bg-muted p-2.5 transition-colors hover:bg-popover"
+      className={`cursor-pointer rounded-lg bg-muted p-2.5 transition-colors hover:bg-popover ${
+        isClosed ? 'opacity-55 hover:opacity-85' : ''
+      }`}
       onClick={() => onOpenEdit(debt.id)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -124,7 +127,7 @@ export const DebtListItem = memo(function DebtListItem({
             </span>
             <span className="text-border-strong">•</span>
             <span>
-              {debt.status === 'closed'
+              {isClosed
                 ? 'Paid off'
                 : `Next installment #${nextInstallmentNumber}`}
             </span>
@@ -137,13 +140,13 @@ export const DebtListItem = memo(function DebtListItem({
               className="h-7 px-2 text-[11px]"
               onClick={(event) => {
                 event.stopPropagation()
-                onPayNext(debt.id)
+                onPayNext(debt.id, nextInstallmentNumber)
               }}
             >
               Pay #{nextInstallmentNumber}
             </Button>
-          ) : debt.status === 'closed' ? (
-            <span className="font-medium text-success">Closed</span>
+          ) : isClosed ? (
+            <span className="font-medium text-success">Paid</span>
           ) : null}
         </div>
       </div>

@@ -6,33 +6,48 @@ import {
   notifyManager,
 } from '@tanstack/react-query'
 import { ConvexQueryClient } from '@convex-dev/react-query'
-import { getRequiredConvexUrl } from '#/lib/convex-public-env'
+import {
+  getConvexUrlError,
+  getOptionalConvexUrl,
+} from '#/lib/convex-public-env'
 import { routeTree } from './routeTree.gen'
+
+type AppStartupError = {
+  message: string
+}
 
 export function getRouter() {
   if (typeof document !== 'undefined') {
     notifyManager.setScheduler(window.requestAnimationFrame)
   }
 
-  const convexUrl = getRequiredConvexUrl()
+  const convexUrl = getOptionalConvexUrl()
+  const convexUrlError = getConvexUrlError()
+  const startupError: AppStartupError | null = convexUrlError
+    ? { message: convexUrlError }
+    : null
 
-  const convexQueryClient = new ConvexQueryClient(convexUrl, {
-    expectAuth: false,
-  })
+  const convexQueryClient = convexUrl
+    ? new ConvexQueryClient(convexUrl, {
+        expectAuth: false,
+      })
+    : null
 
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: {
-        queryKeyHashFn: convexQueryClient.hashFn(),
-        queryFn: convexQueryClient.queryFn(),
-      },
+      queries: convexQueryClient
+        ? {
+            queryKeyHashFn: convexQueryClient.hashFn(),
+            queryFn: convexQueryClient.queryFn(),
+          }
+        : {},
     },
   })
-  convexQueryClient.connect(queryClient)
+  convexQueryClient?.connect(queryClient)
 
   const router = createTanStackRouter({
     routeTree,
-    context: { queryClient, convexQueryClient },
+    context: { queryClient, convexQueryClient, startupError },
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,

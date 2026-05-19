@@ -7,8 +7,7 @@ import { defineConfig } from 'vite-plus'
 
 const isTest = process.env.VITEST === 'true'
 const isServe =
-  !isTest &&
-  (process.argv.includes('dev') || process.argv.includes('preview'))
+  !isTest && (process.argv.includes('dev') || process.argv.includes('preview'))
 
 const nitroErrorHandler = './src/lib/nitro-error-handler.ts'
 const testDependencies = [
@@ -21,6 +20,7 @@ const testDependencies = [
 ]
 
 export default defineConfig({
+  clearScreen: false,
   staged: {
     '*': 'vp check --fix',
   },
@@ -65,11 +65,13 @@ export default defineConfig({
             ? {
                 preset: 'node',
                 errorHandler: nitroErrorHandler,
+                logging: { compressed: false },
                 rollupConfig: { external: [/^@sentry\//] },
               }
             : {
                 preset: 'cloudflare_module',
                 errorHandler: nitroErrorHandler,
+                logging: { compressed: false },
                 cloudflare: {
                   deployConfig: true,
                   nodeCompat: true,

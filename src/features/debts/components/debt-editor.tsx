@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { BadgeDollarSign, CalendarIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
+import { parseMoney } from '@/features/finance/shared'
 import {
   Popover,
   PopoverContent,
@@ -15,15 +16,19 @@ import { formatAmountInputValue, getCurrencySymbol } from '../utils/debt-draft'
 
 export function DebtEditor({
   initialDraft,
+  enabledCurrencies,
   busy,
   mode,
+  submitError,
   onCancel,
   onFieldCommit,
   onSubmit,
 }: {
   initialDraft: DebtDraft
+  enabledCurrencies: string[]
   busy?: boolean
   mode: 'create' | 'edit'
+  submitError?: string | null
   onCancel?: () => void
   onFieldCommit?: (
     field: DebtDraftField,
@@ -54,9 +59,23 @@ export function DebtEditor({
       draftRef.current = nextDraft
       setDraft(nextDraft)
       void onFieldCommit?.(field, value, nextDraft)
+      return nextDraft
     },
     [onFieldCommit],
   )
+
+  const submitDraft = useCallback(
+    (nextDraft = draftRef.current) => {
+      if (mode !== 'create' || busy) {
+        return
+      }
+
+      void onSubmit?.(nextDraft)
+    },
+    [busy, mode, onSubmit],
+  )
+  const canCreateDebt =
+    draft.name.trim().length > 0 && parseMoney(draft.balance) > 0
 
   return (
     <div className="space-y-4">
@@ -72,7 +91,16 @@ export function DebtEditor({
           }
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
-              event.currentTarget.blur()
+              const nextDraft = commitDraftField(
+                'name',
+                event.currentTarget.value,
+              )
+              if (mode === 'create') {
+                event.preventDefault()
+                submitDraft(nextDraft)
+              } else {
+                event.currentTarget.blur()
+              }
             }
           }}
         />
@@ -94,7 +122,16 @@ export function DebtEditor({
             }
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
-                event.currentTarget.blur()
+                const nextDraft = commitDraftField(
+                  'lender',
+                  event.currentTarget.value,
+                )
+                if (mode === 'create') {
+                  event.preventDefault()
+                  submitDraft(nextDraft)
+                } else {
+                  event.currentTarget.blur()
+                }
               }
             }}
           />
@@ -123,10 +160,25 @@ export function DebtEditor({
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
-              event.currentTarget.blur()
+              const nextDraft = commitDraftField(
+                'balance',
+                formatAmountInputValue(event.currentTarget.value),
+              )
+              if (mode === 'create') {
+                event.preventDefault()
+                submitDraft(nextDraft)
+              } else {
+                event.currentTarget.blur()
+              }
             }
           }}
         />
+        {draft.originalBalance && draft.originalBalance !== draft.balance ? (
+          <span className="text-sm text-foreground-faint line-through">
+            {getCurrencySymbol(draft.currency || 'USD')}
+            {draft.originalBalance}
+          </span>
+        ) : null}
       </div>
 
       <div className="space-y-3 pt-3">
@@ -136,27 +188,37 @@ export function DebtEditor({
         <DebtQuickEditControls
           currency={draft.currency}
           dueDate={draft.dueDate}
+          enabledCurrencies={enabledCurrencies}
           payments={draft.payments}
           type={draft.type}
           onCommit={commitDraftField}
-          onUpdate={updateDraft}
         />
       </div>
 
       {mode === 'create' ? (
-        <div className="flex items-center justify-end gap-2 pt-3">
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            disabled={busy || !draft.name.trim()}
-            onClick={() => {
-              void onSubmit?.(draft)
-            }}
-          >
-            Add debt
-          </Button>
+        <div className="pt-3">
+          {submitError ? (
+            <div
+              role="alert"
+              className="text-destructive mb-2.5 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm"
+            >
+              {submitError}
+            </div>
+          ) : null}
+          <div className="flex items-center justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={busy || !canCreateDebt}
+              onClick={() => {
+                submitDraft()
+              }}
+            >
+              Add debt
+            </Button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -164,30 +226,40 @@ export function DebtEditor({
 }
 
 const chipClassName =
-  'inline-flex items-center rounded-full border border-border bg-card px-1 py-0.5 text-xs transition-colors hover:border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] hover:bg-[color-mix(in_srgb,var(--warning)_10%,transparent)]'
+  'inline-flex h-7 w-full min-w-0 items-center rounded-md border border-border bg-card px-2 text-xs transition-colors hover:border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] hover:bg-[color-mix(in_srgb,var(--warning)_10%,transparent)] sm:w-[7.75rem]'
+const chipSelectClassName =
+  'h-6 w-full min-w-0 border-0 bg-transparent px-0 py-0 pr-5 text-xs font-medium shadow-none [&_svg]:h-3.5 [&_svg]:w-3.5'
 
 const DebtQuickEditControls = memo(function DebtQuickEditControls({
   currency,
   dueDate,
+  enabledCurrencies,
   payments,
   type,
   onCommit,
-  onUpdate,
 }: {
   currency: string
   dueDate: string
+  enabledCurrencies: string[]
   payments: string
   type: string
   onCommit: (field: DebtDraftField, value: string) => void
-  onUpdate: (field: DebtDraftField, value: string) => void
 }) {
   const [showDueDatePicker, setShowDueDatePicker] = useState(false)
+  const currencyOptions = Array.from(
+    new Set([
+      ...enabledCurrencies.map((enabledCurrency) =>
+        enabledCurrency.toUpperCase(),
+      ),
+      currency.toUpperCase(),
+    ]),
+  )
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className={chipClassName}>
         <Select
-          className="h-7 min-w-[138px] border-0 bg-transparent px-2 py-0 pr-7 text-xs font-semibold shadow-none"
+          className={chipSelectClassName}
           value={type}
           onChange={(event) => onCommit('type', event.currentTarget.value)}
         >
@@ -201,7 +273,7 @@ const DebtQuickEditControls = memo(function DebtQuickEditControls({
 
       <div className={chipClassName}>
         <Select
-          className="h-7 min-w-[148px] border-0 bg-transparent px-2 py-0 pr-7 text-xs font-semibold shadow-none"
+          className={chipSelectClassName}
           value={payments}
           onChange={(event) => onCommit('payments', event.currentTarget.value)}
         >
@@ -213,34 +285,33 @@ const DebtQuickEditControls = memo(function DebtQuickEditControls({
         </Select>
       </div>
 
-      <div className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1.5 text-xs transition-colors hover:border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] hover:bg-[color-mix(in_srgb,var(--warning)_10%,transparent)]">
-        <BadgeDollarSign className="h-3.5 w-3.5 shrink-0 text-foreground-faint" />
-        <input
-          type="text"
-          placeholder="USD"
-          maxLength={3}
-          className="w-9 bg-transparent text-xs font-semibold uppercase text-foreground outline-none placeholder:text-foreground-faint"
+      <div className={`${chipClassName} gap-2`}>
+        <BadgeDollarSign className="h-3 w-3 shrink-0 text-foreground-faint" />
+        <Select
+          className={`${chipSelectClassName} uppercase`}
           value={currency}
-          onChange={(event) => onUpdate('currency', event.currentTarget.value)}
-          onBlur={(event) => onCommit('currency', event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur()
-            }
-          }}
-        />
+          onChange={(event) => onCommit('currency', event.currentTarget.value)}
+        >
+          {currencyOptions.map((currencyOption) => (
+            <option key={currencyOption} value={currencyOption}>
+              {currencyOption}
+            </option>
+          ))}
+        </Select>
       </div>
 
       <Popover open={showDueDatePicker} onOpenChange={setShowDueDatePicker}>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] hover:bg-[color-mix(in_srgb,var(--warning)_10%,transparent)]"
+            className={`${chipClassName} gap-2 text-xs font-medium text-foreground`}
           >
-            <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-foreground-faint" />
-            {dueDate
-              ? format(new Date(dueDate + 'T00:00:00'), 'dd MMM')
-              : 'Pick date'}
+            <CalendarIcon className="h-3 w-3 shrink-0 text-foreground-faint" />
+            <span className="truncate">
+              {dueDate
+                ? format(new Date(dueDate + 'T00:00:00'), 'dd MMM')
+                : 'Pick date'}
+            </span>
           </button>
         </PopoverTrigger>
         {showDueDatePicker ? (

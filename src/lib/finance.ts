@@ -61,6 +61,7 @@ export interface DebtInstallmentPlan {
 }
 
 export interface DebtInstallmentPayment {
+  id: string
   planVersion: number
   installmentNumber: number
   amountPaid: number
@@ -113,6 +114,7 @@ export interface Goal {
 
 export interface DashboardSettings {
   currency: string
+  enabledCurrencies: string[]
   theme: DashboardTheme
   motion: DashboardMotion
   lastUpdated: string
@@ -223,12 +225,30 @@ export interface UpdateDebtInput {
 
 export interface PayDebtInstallmentInput {
   debtId: string
+  expectedInstallmentNumber: number
   paidAt?: string
 }
 
 export interface RestructureDebtInstallmentsInput {
   debtId: string
   payments: number
+}
+
+export interface PayCustomAmountInput {
+  debtId: string
+  amountPaid: number
+  expectedInstallmentNumber: number
+  paidAt?: string
+}
+
+export interface UpdateInstallmentAmountInput {
+  debtId: string
+  installmentAmount: number
+}
+
+export interface UndoDebtPaymentInput {
+  debtId: string
+  paymentId: string
 }
 
 export type CreateRecurringPaymentInput = Omit<
@@ -244,7 +264,20 @@ export interface UpdateRecurringPaymentInput {
 const STORAGE_KEY = 'spends.sh:dashboard:v1'
 const DASHBOARD_QUERY_KEY = ['finance-dashboard'] as const
 
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100
+}
+
 export const DASHBOARD_SETTINGS_CHANGE_EVENT = 'finance-settings-change'
+export const AVAILABLE_CURRENCIES = [
+  'USD',
+  'PEN',
+  'EUR',
+  'GBP',
+  'MXN',
+  'COP',
+] as const
+const DEFAULT_ENABLED_CURRENCIES = ['USD', 'PEN'] as const
 
 type ConvexDebtDoc = Doc<'debts'>
 
@@ -475,6 +508,7 @@ const seedData: DashboardData = {
   goals: [],
   settings: {
     currency: 'USD',
+    enabledCurrencies: ['USD', 'PEN'],
     theme: 'dark',
     motion: 'full',
     lastUpdated: '2026-03-10T16:00:00.000Z',
@@ -491,7 +525,55 @@ function cloneDashboardData(data: DashboardData): DashboardData {
   return JSON.parse(JSON.stringify(data)) as DashboardData
 }
 
+function normalizeCurrencyCode(value: string) {
+  return value.trim().toUpperCase()
+}
+
+function getValidCurrencyCodeOrNull(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const normalized = normalizeCurrencyCode(value)
+  const allowed = new Set(AVAILABLE_CURRENCIES)
+  if (allowed.has(normalized as (typeof AVAILABLE_CURRENCIES)[number])) {
+    return normalized
+  }
+
+  return null
+}
+
+function sanitizeEnabledCurrencies(
+  input: string[] | undefined,
+  fallbackCurrency: string,
+) {
+  const allowed = new Set(AVAILABLE_CURRENCIES)
+  const normalized = (input ?? [])
+    .map(normalizeCurrencyCode)
+    .filter((currency) =>
+      allowed.has(currency as (typeof AVAILABLE_CURRENCIES)[number]),
+    )
+  const unique = Array.from(new Set(normalized))
+
+  if (unique.length) {
+    return unique
+  }
+
+  const fallback = normalizeCurrencyCode(fallbackCurrency)
+  if (allowed.has(fallback as (typeof AVAILABLE_CURRENCIES)[number])) {
+    return [fallback]
+  }
+
+  return [...DEFAULT_ENABLED_CURRENCIES]
+}
+
 function emptyDashboardData(currency = 'USD'): DashboardData {
+  const normalizedCurrency = normalizeCurrencyCode(currency)
+  const enabledCurrencies = sanitizeEnabledCurrencies(
+    [...DEFAULT_ENABLED_CURRENCIES],
+    normalizedCurrency,
+  )
+
   return {
     debts: [],
     expenses: [],
@@ -500,7 +582,10 @@ function emptyDashboardData(currency = 'USD'): DashboardData {
     goals: [],
     recurringPayments: [],
     settings: {
-      currency,
+      currency: enabledCurrencies.includes(normalizedCurrency)
+        ? normalizedCurrency
+        : enabledCurrencies[0]!,
+      enabledCurrencies,
       theme: 'dark',
       motion: 'full',
       lastUpdated: new Date().toISOString(),
@@ -522,9 +607,8 @@ function normalizeDashboardData(input: unknown): DashboardData {
       ? value.debts.map((debt) => ({
           ...debt,
           currency:
-            typeof debt.currency === 'string' && debt.currency
-              ? debt.currency
-              : fallback.settings.currency,
+            getValidCurrencyCodeOrNull(debt.currency) ??
+            fallback.settings.currency,
           payments:
             typeof (debt as any).payments === 'number'
               ? (debt as any).payments
@@ -565,9 +649,8 @@ function normalizeDashboardData(input: unknown): DashboardData {
       ? value.expenses.map((expense) => ({
           ...expense,
           currency:
-            typeof expense.currency === 'string' && expense.currency
-              ? expense.currency
-              : fallback.settings.currency,
+            getValidCurrencyCodeOrNull(expense.currency) ??
+            fallback.settings.currency,
           spentAt:
             typeof expense.spentAt === 'string' && expense.spentAt
               ? expense.spentAt
@@ -589,9 +672,8 @@ function normalizeDashboardData(input: unknown): DashboardData {
       ? value.recurringPayments.map((payment) => ({
           ...payment,
           currency:
-            typeof payment.currency === 'string' && payment.currency
-              ? payment.currency
-              : fallback.settings.currency,
+            getValidCurrencyCodeOrNull(payment.currency) ??
+            fallback.settings.currency,
           dueDay:
             typeof payment.dueDay === 'number'
               ? Math.max(1, Math.min(31, Math.round(payment.dueDay)))
@@ -616,10 +698,28 @@ function normalizeDashboardData(input: unknown): DashboardData {
         }))
       : fallback.recurringPayments,
     settings: {
-      currency:
+      currency: (() => {
+        const rawCurrency =
+          typeof value.settings?.currency === 'string'
+            ? normalizeCurrencyCode(value.settings.currency)
+            : fallback.settings.currency
+        const enabled = sanitizeEnabledCurrencies(
+          Array.isArray(value.settings?.enabledCurrencies)
+            ? value.settings?.enabledCurrencies
+            : fallback.settings.enabledCurrencies,
+          rawCurrency,
+        )
+
+        return enabled.includes(rawCurrency) ? rawCurrency : enabled[0]!
+      })(),
+      enabledCurrencies: sanitizeEnabledCurrencies(
+        Array.isArray(value.settings?.enabledCurrencies)
+          ? value.settings?.enabledCurrencies
+          : fallback.settings.enabledCurrencies,
         typeof value.settings?.currency === 'string'
           ? value.settings.currency
           : fallback.settings.currency,
+      ),
       theme:
         value.settings?.theme === 'light' || value.settings?.theme === 'dark'
           ? value.settings.theme
@@ -657,9 +757,17 @@ export function getStoredDashboardSettings(): DashboardSettings {
 
 function starterDashboardData(currency = 'USD'): DashboardData {
   const next = cloneDashboardData(seedData)
+  const normalizedCurrency = normalizeCurrencyCode(currency)
+  const enabledCurrencies = sanitizeEnabledCurrencies(
+    next.settings.enabledCurrencies,
+    normalizedCurrency,
+  )
 
   next.settings = {
-    currency,
+    currency: enabledCurrencies.includes(normalizedCurrency)
+      ? normalizedCurrency
+      : enabledCurrencies[0]!,
+    enabledCurrencies,
     theme: 'dark',
     motion: 'full',
     lastUpdated: new Date().toISOString(),
@@ -809,6 +917,22 @@ export function useFinanceActions() {
   const syncCache = (next: DashboardData) => {
     queryClient.setQueryData(DASHBOARD_QUERY_KEY, next)
   }
+  const updateDashboardDataFromCache = async (
+    updater: (current: DashboardData) => DashboardData,
+  ) => {
+    const cached =
+      queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY) ?? null
+    const current = cached ?? (await readDashboardData())
+    const next = updater(current)
+
+    return writeDashboardData({
+      ...next,
+      settings: {
+        ...next.settings,
+        lastUpdated: new Date().toISOString(),
+      },
+    })
+  }
 
   const createItemMutation = useMutation({
     mutationFn: async (input: CreateItemInput) => {
@@ -884,10 +1008,6 @@ export function useFinanceActions() {
       })
     },
     onMutate: async (input): Promise<FinanceDashboardMutationContext> => {
-      if (input.kind !== 'debts') {
-        return {}
-      }
-
       await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
 
       const previousDashboard =
@@ -897,16 +1017,22 @@ export function useFinanceActions() {
         return {}
       }
 
-      const createdAt = new Date().toISOString()
-      const optimisticDebt = buildDebtRecord(input.value, {
-        id: createId('debt'),
-        createdAt,
-      })
+      if (input.kind === 'debts') {
+        const createdAt = new Date().toISOString()
+        const optimisticDebt = buildDebtRecord(input.value, {
+          id: createId('temp-debt'),
+          createdAt,
+          updatedAt: createdAt,
+        })
 
-      syncCache({
-        ...previousDashboard,
-        debts: sortDebtsByDueDate([optimisticDebt, ...previousDashboard.debts]),
-      })
+        syncCache({
+          ...previousDashboard,
+          debts: sortDebtsByDueDate([
+            optimisticDebt,
+            ...previousDashboard.debts,
+          ]),
+        })
+      }
 
       return { previousDashboard }
     },
@@ -944,6 +1070,35 @@ export function useFinanceActions() {
         ...current,
         [kind]: current[kind].filter((item) => item.id !== id),
       }))
+    },
+    onMutate: async ({
+      kind,
+      id,
+    }): Promise<FinanceDashboardMutationContext> => {
+      if (kind !== 'debts') {
+        return {}
+      }
+
+      await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
+
+      const previousDashboard =
+        queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY)
+
+      if (!previousDashboard) {
+        return {}
+      }
+
+      syncCache({
+        ...previousDashboard,
+        debts: previousDashboard.debts.filter((debt) => debt.id !== id),
+      })
+
+      return { previousDashboard }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousDashboard) {
+        syncCache(context.previousDashboard)
+      }
     },
     onSuccess: (next, { kind }) => {
       if (kind === 'debts') {
@@ -1011,13 +1166,104 @@ export function useFinanceActions() {
   })
 
   const payDebtInstallmentMutation = useMutation({
-    mutationFn: async ({ debtId, paidAt }: PayDebtInstallmentInput) => {
+    mutationFn: async ({
+      debtId,
+      expectedInstallmentNumber,
+      paidAt,
+    }: PayDebtInstallmentInput) => {
       await convex.mutation(api.debts.payNextInstallment, {
         debtId: debtId as Id<'debts'>,
+        expectedInstallmentNumber,
         ...(paidAt ? { paidAt } : {}),
         requestId: crypto.randomUUID(),
       })
       return null
+    },
+    onMutate: async ({
+      debtId,
+      expectedInstallmentNumber,
+      paidAt,
+    }): Promise<FinanceDashboardMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
+      const previousDashboard =
+        queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY)
+
+      if (!previousDashboard) {
+        return {}
+      }
+
+      const now = new Date().toISOString().slice(0, 10)
+      const tempPaymentId = `temp-${crypto.randomUUID()}`
+
+      syncCache({
+        ...previousDashboard,
+        debts: previousDashboard.debts.map((debt) => {
+          if (debt.id !== debtId) {
+            return debt
+          }
+
+          const activePlan =
+            debt.activePlan ??
+            (debt.installmentPlans ?? []).find((p) => p.status === 'active')
+
+          if (
+            !activePlan ||
+            activePlan.nextInstallmentNumber !== expectedInstallmentNumber
+          ) {
+            return debt
+          }
+
+          const amountPaid = roundMoney(
+            expectedInstallmentNumber === activePlan.installmentsTotal
+              ? debt.balance
+              : Math.min(debt.balance, activePlan.installmentAmount),
+          )
+          const newBalance = roundMoney(Math.max(0, debt.balance - amountPaid))
+          const nextInstallmentNumber = expectedInstallmentNumber + 1
+          const isCompleted =
+            newBalance <= 0 ||
+            nextInstallmentNumber > activePlan.installmentsTotal
+          const newRemaining = Math.max(
+            0,
+            activePlan.installmentsTotal - nextInstallmentNumber + 1,
+          )
+          const updatedPlan = {
+            ...activePlan,
+            nextInstallmentNumber,
+            status: isCompleted ? 'completed' : activePlan.status,
+          }
+          const tempPayment: DebtInstallmentPayment = {
+            id: tempPaymentId,
+            planVersion: activePlan.version,
+            installmentNumber: expectedInstallmentNumber,
+            amountPaid,
+            paidAt: paidAt ?? now,
+            createdAt: new Date().toISOString(),
+          }
+
+          return {
+            ...debt,
+            balance: newBalance,
+            status: isCompleted ? 'closed' : 'active',
+            remainingInstallments: newRemaining,
+            installmentPlans: (debt.installmentPlans ?? []).map((plan) =>
+              plan.version === activePlan.version ? updatedPlan : plan,
+            ),
+            installmentPayments: [
+              ...(debt.installmentPayments ?? []),
+              tempPayment,
+            ],
+            activePlan: updatedPlan,
+          }
+        }),
+      })
+
+      return { previousDashboard }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousDashboard) {
+        syncCache(context.previousDashboard)
+      }
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
@@ -1040,13 +1286,207 @@ export function useFinanceActions() {
     },
   })
 
+  const payCustomAmountMutation = useMutation({
+    mutationFn: async ({
+      debtId,
+      amountPaid,
+      expectedInstallmentNumber,
+      paidAt,
+    }: PayCustomAmountInput) => {
+      await convex.mutation(api.debts.payCustomAmount, {
+        debtId: debtId as Id<'debts'>,
+        amountPaid,
+        expectedInstallmentNumber,
+        ...(paidAt ? { paidAt } : {}),
+        requestId: crypto.randomUUID(),
+      })
+      return null
+    },
+    onMutate: async ({
+      debtId,
+      amountPaid,
+      expectedInstallmentNumber,
+    }): Promise<FinanceDashboardMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
+      const previousDashboard =
+        queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY)
+
+      if (!previousDashboard) {
+        return {}
+      }
+
+      const now = new Date().toISOString().slice(0, 10)
+      const tempPaymentId = `temp-${crypto.randomUUID()}`
+
+      syncCache({
+        ...previousDashboard,
+        debts: previousDashboard.debts.map((debt) => {
+          if (debt.id !== debtId) {
+            return debt
+          }
+          const activePlan =
+            debt.activePlan ??
+            (debt.installmentPlans ?? []).find((p) => p.status === 'active')
+          if (
+            activePlan &&
+            activePlan.nextInstallmentNumber !== expectedInstallmentNumber
+          ) {
+            return debt
+          }
+          const newBalance = roundMoney(Math.max(0, debt.balance - amountPaid))
+          const isCompleted = newBalance <= 0
+
+          const totalInstallments = debt.payments ?? 1
+          const paidCount = (debt.installmentPayments?.length ?? 0) + 1
+          const remainingInstallments = Math.max(
+            0,
+            totalInstallments - paidCount,
+          )
+
+          let newInstallments = debt.installmentPlans ?? []
+          let newPayments = debt.installmentPayments ?? []
+          let newRemaining = remainingInstallments
+          let newStatus: DebtStatus = debt.status ?? 'active'
+          let newActivePlan = debt.activePlan
+
+          if (isCompleted) {
+            newStatus = 'closed'
+            newRemaining = 0
+          }
+
+          if (activePlan && !isCompleted && remainingInstallments > 0) {
+            const futureAmount = roundMoney(newBalance / remainingInstallments)
+            const updatedPlan = {
+              ...activePlan,
+              installmentAmount: futureAmount,
+            }
+            newInstallments = (debt.installmentPlans ?? []).map((p) =>
+              p.version === activePlan.version ? updatedPlan : p,
+            )
+            newActivePlan = updatedPlan
+          }
+
+          const tempPayment: DebtInstallmentPayment = {
+            id: tempPaymentId,
+            planVersion: newActivePlan?.version ?? 1,
+            installmentNumber: newActivePlan?.nextInstallmentNumber ?? 1,
+            amountPaid,
+            paidAt: now,
+            createdAt: new Date().toISOString(),
+          }
+
+          return {
+            ...debt,
+            balance: newBalance,
+            status: newStatus,
+            remainingInstallments: newRemaining,
+            installmentPlans: newInstallments,
+            installmentPayments: [...newPayments, tempPayment],
+            activePlan: newActivePlan
+              ? {
+                  ...newActivePlan,
+                  nextInstallmentNumber:
+                    (newActivePlan.nextInstallmentNumber ?? 1) + 1,
+                }
+              : newActivePlan,
+          }
+        }),
+      })
+
+      return { previousDashboard }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousDashboard) {
+        syncCache(context.previousDashboard)
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
+    },
+  })
+  const updateInstallmentAmountMutation = useMutation({
+    mutationFn: async ({
+      debtId,
+      installmentAmount,
+    }: UpdateInstallmentAmountInput) => {
+      await convex.mutation(api.debts.updateInstallmentAmount, {
+        debtId: debtId as Id<'debts'>,
+        installmentAmount,
+      })
+      return null
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
+    },
+  })
+
+  const undoDebtPaymentMutation = useMutation({
+    mutationFn: async ({ debtId, paymentId }: UndoDebtPaymentInput) => {
+      await convex.mutation(api.debts.undoLastPayment, {
+        debtId: debtId as Id<'debts'>,
+        paymentId: paymentId as Id<'debtPayments'>,
+      })
+      return null
+    },
+    onMutate: async ({
+      debtId,
+      paymentId,
+    }): Promise<FinanceDashboardMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
+      const previousDashboard =
+        queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY)
+
+      if (!previousDashboard) {
+        return {}
+      }
+
+      syncCache({
+        ...previousDashboard,
+        debts: previousDashboard.debts.map((debt) => {
+          if (debt.id !== debtId) {
+            return debt
+          }
+          const payment = debt.installmentPayments?.find(
+            (p) => p.id === paymentId,
+          )
+          if (!payment) {
+            return debt
+          }
+          const newBalance = debt.balance + payment.amountPaid
+          const newRemaining = (debt.remainingInstallments ?? debt.payments) + 1
+          return {
+            ...debt,
+            balance: newBalance,
+            remainingInstallments: newRemaining,
+            status: 'active' as DebtStatus,
+            installmentPayments:
+              debt.installmentPayments?.filter((p) => p.id !== paymentId) ?? [],
+          }
+        }),
+      })
+
+      return { previousDashboard }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousDashboard) {
+        syncCache(context.previousDashboard)
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
+    },
+  })
+
   const createRecurringPaymentMutation = useMutation({
     mutationFn: async (input: CreateRecurringPaymentInput) => {
-      return updateDashboardData((current) => ({
+      return updateDashboardDataFromCache((current) => ({
         ...current,
         recurringPayments: [
           {
             ...input,
+            currency:
+              getValidCurrencyCodeOrNull(input.currency) ??
+              current.settings.currency,
             id: createId('recurring'),
             cadence: 'monthly',
             createdAt: new Date().toISOString(),
@@ -1061,11 +1501,22 @@ export function useFinanceActions() {
 
   const updateRecurringPaymentMutation = useMutation({
     mutationFn: async ({ id, value }: UpdateRecurringPaymentInput) => {
-      return updateDashboardData((current) => ({
+      return updateDashboardDataFromCache((current) => ({
         ...current,
         recurringPayments: current.recurringPayments.map((p) =>
           p.id === id
-            ? { ...p, ...value, updatedAt: new Date().toISOString() }
+            ? {
+                ...p,
+                ...value,
+                ...(value.currency
+                  ? {
+                      currency:
+                        getValidCurrencyCodeOrNull(value.currency) ??
+                        current.settings.currency,
+                    }
+                  : {}),
+                updatedAt: new Date().toISOString(),
+              }
             : p,
         ),
       }))
@@ -1075,7 +1526,7 @@ export function useFinanceActions() {
 
   const removeRecurringPaymentMutation = useMutation({
     mutationFn: async (id: string) => {
-      return updateDashboardData((current) => ({
+      return updateDashboardDataFromCache((current) => ({
         ...current,
         recurringPayments: current.recurringPayments.filter((p) => p.id !== id),
       }))
@@ -1087,10 +1538,26 @@ export function useFinanceActions() {
     mutationFn: async (settings: Partial<DashboardSettings>) => {
       return updateDashboardData((current) => ({
         ...current,
-        settings: {
-          ...current.settings,
-          ...settings,
-        },
+        settings: (() => {
+          const requestedCurrency =
+            typeof settings.currency === 'string'
+              ? normalizeCurrencyCode(settings.currency)
+              : current.settings.currency
+          const enabledCurrencies = sanitizeEnabledCurrencies(
+            settings.enabledCurrencies ?? current.settings.enabledCurrencies,
+            requestedCurrency,
+          )
+          const currency = enabledCurrencies.includes(requestedCurrency)
+            ? requestedCurrency
+            : enabledCurrencies[0]!
+
+          return {
+            ...current.settings,
+            ...settings,
+            currency,
+            enabledCurrencies,
+          }
+        })(),
       }))
     },
     onSuccess: syncCache,
@@ -1128,8 +1595,11 @@ export function useFinanceActions() {
       removeItem: removeItemMutation.mutateAsync,
       updateDebt: updateDebtMutation.mutateAsync,
       payDebtInstallment: payDebtInstallmentMutation.mutateAsync,
+      payCustomAmount: payCustomAmountMutation.mutateAsync,
       restructureDebtInstallments:
         restructureDebtInstallmentsMutation.mutateAsync,
+      updateInstallmentAmount: updateInstallmentAmountMutation.mutateAsync,
+      undoDebtPayment: undoDebtPaymentMutation.mutateAsync,
       createRecurringPayment: createRecurringPaymentMutation.mutateAsync,
       updateRecurringPayment: updateRecurringPaymentMutation.mutateAsync,
       removeRecurringPayment: removeRecurringPaymentMutation.mutateAsync,
@@ -1141,7 +1611,10 @@ export function useFinanceActions() {
         removeItemMutation.isPending ||
         updateDebtMutation.isPending ||
         payDebtInstallmentMutation.isPending ||
+        payCustomAmountMutation.isPending ||
         restructureDebtInstallmentsMutation.isPending ||
+        updateInstallmentAmountMutation.isPending ||
+        undoDebtPaymentMutation.isPending ||
         createRecurringPaymentMutation.isPending ||
         updateRecurringPaymentMutation.isPending ||
         removeRecurringPaymentMutation.isPending ||
@@ -1156,6 +1629,8 @@ export function useFinanceActions() {
       createItemMutation.mutateAsync,
       createRecurringPaymentMutation.isPending,
       createRecurringPaymentMutation.mutateAsync,
+      payCustomAmountMutation.isPending,
+      payCustomAmountMutation.mutateAsync,
       payDebtInstallmentMutation.isPending,
       payDebtInstallmentMutation.mutateAsync,
       removeItemMutation.isPending,
@@ -1164,6 +1639,10 @@ export function useFinanceActions() {
       removeRecurringPaymentMutation.mutateAsync,
       restructureDebtInstallmentsMutation.isPending,
       restructureDebtInstallmentsMutation.mutateAsync,
+      undoDebtPaymentMutation.isPending,
+      undoDebtPaymentMutation.mutateAsync,
+      updateInstallmentAmountMutation.isPending,
+      updateInstallmentAmountMutation.mutateAsync,
       resetDemoDataMutation.isPending,
       resetDemoDataMutation.mutateAsync,
       updateDebtMutation.isPending,
@@ -1177,25 +1656,40 @@ export function useFinanceActions() {
 }
 
 export function formatCurrency(value: number, currency = 'USD') {
-  if (currency.toUpperCase() === 'PEN') {
+  const normalizedCurrency = normalizeCurrencyCode(currency)
+
+  if (normalizedCurrency === 'PEN') {
     const absoluteValue = Math.abs(value)
     const sign = value < 0 ? '-' : ''
     const formattedValue = new Intl.NumberFormat('en-US', {
-      maximumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(absoluteValue)
 
-    return `${sign}S/. ${formattedValue}`
+    return `${sign}S/${formattedValue}`
   }
 
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(value)
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: normalizedCurrency || 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  }
 }
 
 export function formatCompactCurrency(value: number, currency = 'USD') {
-  if (currency.toUpperCase() === 'PEN') {
+  const normalizedCurrency = normalizeCurrencyCode(currency)
+
+  if (normalizedCurrency === 'PEN') {
     const absoluteValue = Math.abs(value)
     const sign = value < 0 ? '-' : ''
     const formattedValue = new Intl.NumberFormat('en-US', {
@@ -1203,15 +1697,24 @@ export function formatCompactCurrency(value: number, currency = 'USD') {
       maximumFractionDigits: 1,
     }).format(absoluteValue)
 
-    return `${sign}S/. ${formattedValue}`
+    return `${sign}S/${formattedValue}`
   }
 
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value)
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: normalizedCurrency || 'USD',
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value)
+  } catch {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value)
+  }
 }
 
 export function formatPercent(value: number) {

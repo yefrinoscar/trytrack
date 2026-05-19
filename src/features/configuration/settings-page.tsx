@@ -3,6 +3,7 @@ import { MoonStar, Sparkles, SunMedium, WalletCards } from 'lucide-react'
 import { Select } from '@/components/ui/select'
 import { FinancePageState } from '@/features/finance/shared'
 import type { FinanceActions } from '@/features/finance/shared'
+import { AVAILABLE_CURRENCIES } from '@/lib/finance'
 import { formatCurrency } from '@/lib/finance'
 import type { DashboardData } from '@/lib/finance'
 import { cn } from '@/lib/utils'
@@ -63,35 +64,83 @@ function SettingsView({
           description="Changes formatting only. Stored values stay the same."
           label="Currency"
         >
-          <div className="flex max-w-xl flex-col gap-4 sm:flex-row sm:items-end">
-            <label className="flex min-w-[220px] flex-1 flex-col gap-2">
+          <div className="flex max-w-xl flex-col gap-4">
+            <div className="space-y-2">
               <span className="text-sm font-medium text-foreground">
-                Display currency
+                Enabled currencies
               </span>
-              <Select
-                id="currency"
-                disabled={actions.isWorking}
-                value={data.settings.currency}
-                onChange={(event) =>
-                  void actions.updateSettings({
-                    currency: event.target.value,
-                  })
-                }
-              >
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-                <option value="MXN">MXN</option>
-                <option value="COP">COP</option>
-                <option value="PEN">PEN</option>
-              </Select>
-            </label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {AVAILABLE_CURRENCIES.map((currencyCode) => {
+                  const enabled =
+                    data.settings.enabledCurrencies.includes(currencyCode)
+                  return (
+                    <button
+                      key={currencyCode}
+                      type="button"
+                      disabled={
+                        actions.isWorking ||
+                        (enabled &&
+                          data.settings.enabledCurrencies.length <= 1 &&
+                          data.settings.currency === currencyCode)
+                      }
+                      className={cn(
+                        'rounded-lg border px-3 py-2 text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50',
+                        enabled
+                          ? 'border-border-strong bg-popover text-foreground'
+                          : 'border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground',
+                      )}
+                      onClick={() => {
+                        const current = data.settings.enabledCurrencies
+                        const next = enabled
+                          ? current.filter((value) => value !== currencyCode)
+                          : [...current, currencyCode]
 
-            <div className="min-w-[180px] rounded-2xl border border-border bg-muted px-4 py-3">
-              <p className="eyebrow text-muted-foreground/80">Preview</p>
-              <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-                {formatCurrency(previewAmount, data.settings.currency)}
-              </p>
+                        void actions.updateSettings({
+                          enabledCurrencies: next,
+                          ...(enabled &&
+                          data.settings.currency === currencyCode &&
+                          next.length
+                            ? { currency: next[0] }
+                            : {}),
+                        })
+                      }}
+                    >
+                      {currencyCode}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+              <label className="flex min-w-[220px] flex-1 flex-col gap-2">
+                <span className="text-sm font-medium text-foreground">
+                  Display currency
+                </span>
+                <Select
+                  id="currency"
+                  disabled={actions.isWorking}
+                  value={data.settings.currency}
+                  onChange={(event) =>
+                    void actions.updateSettings({
+                      currency: event.target.value,
+                    })
+                  }
+                >
+                  {data.settings.enabledCurrencies.map((currencyCode) => (
+                    <option key={currencyCode} value={currencyCode}>
+                      {currencyCode}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+
+              <div className="min-w-[180px] rounded-2xl border border-border bg-muted px-4 py-3">
+                <p className="eyebrow text-muted-foreground/80">Preview</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                  {formatCurrency(previewAmount, data.settings.currency)}
+                </p>
+              </div>
             </div>
           </div>
         </SettingsSection>

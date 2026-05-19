@@ -134,17 +134,66 @@ function getSyntheticPlan(debt: {
   }
 }
 
-async function getActivePlan(ctx: any, debtId: any) {
-  return await ctx.db
+function pickLatestPlanForVersion<
+  T extends {
+    version: number
+    createdAt: number
+    updatedAt: number
+  },
+>(plans: T[]) {
+  const plansByVersion = new Map<number, T>()
+
+  for (const plan of plans) {
+    const existing = plansByVersion.get(plan.version)
+    if (
+      !existing ||
+      plan.updatedAt > existing.updatedAt ||
+      (plan.updatedAt === existing.updatedAt &&
+        plan.createdAt >= existing.createdAt)
+    ) {
+      plansByVersion.set(plan.version, plan)
+    }
+  }
+
+  return Array.from(plansByVersion.values())
+}
+
+function dedupePaymentsById<
+  T extends {
+    _id: string
+  },
+>(payments: T[]) {
+  const paymentsById = new Map<string, T>()
+
+  for (const payment of payments) {
+    paymentsById.set(payment._id, payment)
+  }
+
+  return Array.from(paymentsById.values())
+}
+
+async function getActivePlan(ctx: any, debt: any) {
+  const activePlans = await ctx.db
     .query('debtPlans')
     .withIndex('by_debtId_and_status', (q: any) =>
-      q.eq('debtId', debtId).eq('status', 'active'),
+      q.eq('debtId', debt._id).eq('status', 'active'),
     )
-    .unique()
+    .take(20)
+
+  if (!activePlans.length) {
+    return null
+  }
+
+  return pickLatestPlanForVersion(activePlans).sort(
+    (left, right) =>
+      right.version - left.version ||
+      right.updatedAt - left.updatedAt ||
+      right.createdAt - left.createdAt,
+  )[0]
 }
 
 async function ensureActivePlan(ctx: any, debt: any) {
-  const existingPlan = await getActivePlan(ctx, debt._id)
+  const existingPlan = await getActivePlan(ctx, debt)
 
   if (existingPlan) {
     return existingPlan
@@ -189,6 +238,7 @@ function serializePlan(plan: {
 }
 
 function serializePayment(payment: {
+  _id: string
   planVersion: number
   installmentNumber: number
   amountPaid: number
@@ -196,6 +246,7 @@ function serializePayment(payment: {
   createdAt: number
 }) {
   return {
+    id: payment._id,
     planVersion: payment.planVersion,
     installmentNumber: payment.installmentNumber,
     amountPaid: payment.amountPaid,
@@ -231,6 +282,7 @@ function buildInstallmentOverview(
     updatedAt: number
   }>,
   storedPayments: Array<{
+    _id: string
     debtId: string
     planVersion: number
     installmentNumber: number
@@ -255,8 +307,8 @@ function buildInstallmentOverview(
   }
 
   return debts.map((debt) => {
-    const plans = plansByDebtId.get(debt._id) ?? []
-    const payments = paymentsByDebtId.get(debt._id) ?? []
+    const plans = pickLatestPlanForVersion(plansByDebtId.get(debt._id) ?? [])
+    const payments = dedupePaymentsById(paymentsByDebtId.get(debt._id) ?? [])
 
     return {
       debtId: debt._id,
@@ -479,6 +531,7 @@ export const update = mutation({
 export const payNextInstallment = mutation({
   args: {
     debtId: v.id('debts'),
+    expectedInstallmentNumber: v.number(),
     paidAt: v.optional(v.string()),
     requestId: v.string(),
   },
@@ -504,6 +557,12 @@ export const payNextInstallment = mutation({
 
     const activePlan = await ensureActivePlan(ctx, debt)
     const installmentNumber = activePlan.nextInstallmentNumber
+
+    if (installmentNumber !== Math.round(args.expectedInstallmentNumber)) {
+      throw new Error(
+        'Installment state changed. Try again after the list refreshes.',
+      )
+    }
 
     if (installmentNumber > activePlan.installmentsTotal) {
       throw new Error('No pending installments left')
@@ -624,6 +683,251 @@ export const restructureInstallments = mutation({
         debt.dueDay ?? deriveDueDay(debt.dueDate),
       ),
       status: 'active',
+      updatedAt: now,
+    })
+  },
+})
+
+export const payCustomAmount = mutation({
+  args: {
+    debtId: v.id('debts'),
+    amountPaid: v.number(),
+    expectedInstallmentNumber: v.number(),
+    paidAt: v.optional(v.string()),
+    requestId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const debt = await ctx.db.get(args.debtId)
+
+    if (!debt) {
+      throw new Error('Debt not found')
+    }
+
+    if (debt.status === 'closed' || debt.balance <= 0) {
+      throw new Error('Debt is already closed')
+    }
+
+    const activePlan = await ensureActivePlan(ctx, debt)
+    const paymentAmount = roundMoney(args.amountPaid)
+
+    if (paymentAmount <= 0) {
+      throw new Error('Payment amount must be greater than 0')
+    }
+
+    if (paymentAmount > debt.balance) {
+      throw new Error('Payment amount exceeds remaining balance')
+    }
+
+    const existingPayment = await ctx.db
+      .query('debtPayments')
+      .withIndex('by_requestId', (q) => q.eq('requestId', args.requestId))
+      .unique()
+
+    if (existingPayment) {
+      return existingPayment
+    }
+
+    const now = Date.now()
+    const installmentNumber = activePlan.nextInstallmentNumber
+    const paidAt = args.paidAt ?? new Date().toISOString().slice(0, 10)
+
+    if (installmentNumber !== Math.round(args.expectedInstallmentNumber)) {
+      throw new Error(
+        'Installment state changed. Try again after the list refreshes.',
+      )
+    }
+
+    if (installmentNumber > activePlan.installmentsTotal) {
+      throw new Error('No pending installments left')
+    }
+
+    const existingInstallmentPayment = await ctx.db
+      .query('debtPayments')
+      .withIndex('by_debtId_and_planVersion_and_installmentNumber', (q) =>
+        q
+          .eq('debtId', args.debtId)
+          .eq('planVersion', activePlan.version)
+          .eq('installmentNumber', installmentNumber),
+      )
+      .unique()
+
+    if (existingInstallmentPayment) {
+      throw new Error('This installment has already been paid')
+    }
+
+    await ctx.db.insert('debtPayments', {
+      debtId: args.debtId,
+      planVersion: activePlan.version,
+      installmentNumber,
+      amountPaid: paymentAmount,
+      paidAt,
+      requestId: args.requestId,
+      createdAt: now,
+    })
+
+    const nextBalance = roundMoney(Math.max(0, debt.balance - paymentAmount))
+    const nextInstallmentNumber = installmentNumber + 1
+    const isCompleted = nextBalance <= 0
+
+    const remainingInstallments = Math.max(
+      0,
+      activePlan.installmentsTotal - nextInstallmentNumber + 1,
+    )
+
+    let nextInstallmentAmount = activePlan.installmentAmount
+    if (!isCompleted && remainingInstallments > 0) {
+      nextInstallmentAmount = roundMoney(nextBalance / remainingInstallments)
+    }
+
+    const nextDueDate = isCompleted
+      ? debt.dueDate
+      : buildDueDate(
+          addMonths(getMonthKey(debt.dueDate), 1),
+          debt.dueDay ?? deriveDueDay(debt.dueDate),
+        )
+
+    await ctx.db.patch(activePlan._id, {
+      nextInstallmentNumber,
+      installmentAmount: nextInstallmentAmount,
+      status: isCompleted ? 'completed' : 'active',
+      updatedAt: now,
+    })
+
+    await ctx.db.patch(args.debtId, {
+      balance: nextBalance,
+      remainingInstallments,
+      dueDate: nextDueDate,
+      status: isCompleted ? 'closed' : 'active',
+      originalBalance: getOriginalBalance(debt),
+      currentPlanVersion: activePlan.version,
+      updatedAt: now,
+    })
+
+    return await ctx.db.get(
+      (await ctx.db
+        .query('debtPayments')
+        .withIndex('by_requestId', (q) => q.eq('requestId', args.requestId))
+        .unique())!._id,
+    )
+  },
+})
+
+export const updateInstallmentAmount = mutation({
+  args: {
+    debtId: v.id('debts'),
+    installmentAmount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const debt = await ctx.db.get(args.debtId)
+
+    if (!debt) {
+      throw new Error('Debt not found')
+    }
+
+    if (debt.status === 'closed' || debt.balance <= 0) {
+      throw new Error('Debt is already closed')
+    }
+
+    const activePlan = await ensureActivePlan(ctx, debt)
+    const paymentAmount = roundMoney(args.installmentAmount)
+
+    if (paymentAmount <= 0) {
+      throw new Error('Installment amount must be greater than 0')
+    }
+
+    const totalInstallments = Math.ceil(debt.balance / paymentAmount)
+    const now = Date.now()
+
+    await ctx.db.patch(activePlan._id, {
+      installmentsTotal: totalInstallments,
+      installmentAmount: paymentAmount,
+      nextInstallmentNumber: 1,
+      status: 'active',
+      updatedAt: now,
+    })
+
+    await ctx.db.patch(args.debtId, {
+      payments: totalInstallments,
+      remainingInstallments: totalInstallments,
+      currentPlanVersion: activePlan.version,
+      updatedAt: now,
+    })
+  },
+})
+
+export const undoLastPayment = mutation({
+  args: {
+    debtId: v.id('debts'),
+    paymentId: v.id('debtPayments'),
+  },
+  handler: async (ctx, args) => {
+    const debt = await ctx.db.get(args.debtId)
+
+    if (!debt) {
+      throw new Error('Debt not found')
+    }
+
+    const payment = await ctx.db.get(args.paymentId)
+
+    if (!payment || payment.debtId !== args.debtId) {
+      throw new Error('Payment not found')
+    }
+
+    const allPayments = await ctx.db
+      .query('debtPayments')
+      .withIndex('by_debtId', (q) => q.eq('debtId', args.debtId))
+      .take(500)
+
+    const sortedPayments = allPayments
+      .slice()
+      .sort(
+        (a, b) =>
+          b.createdAt - a.createdAt ||
+          b.installmentNumber - a.installmentNumber,
+      )
+
+    if (sortedPayments[0]?._id !== args.paymentId) {
+      throw new Error('Can only undo the most recent payment')
+    }
+
+    const paymentPlans = await ctx.db
+      .query('debtPlans')
+      .withIndex('by_debtId_and_version', (q) =>
+        q.eq('debtId', args.debtId).eq('version', payment.planVersion),
+      )
+      .take(20)
+    const paymentPlan = pickLatestPlanForVersion(paymentPlans)[0]
+
+    if (!paymentPlan) {
+      throw new Error('Payment plan not found')
+    }
+
+    const laterPlans = await ctx.db
+      .query('debtPlans')
+      .withIndex('by_debtId', (q) => q.eq('debtId', args.debtId))
+      .take(100)
+    const plansToRemove = laterPlans.filter(
+      (plan) => plan.version > payment.planVersion,
+    )
+    const now = Date.now()
+    const nextBalance = roundMoney(debt.balance + payment.amountPaid)
+    const nextInstallmentNumber = payment.installmentNumber
+
+    await ctx.db.delete(args.paymentId)
+    await Promise.all(plansToRemove.map((plan) => ctx.db.delete(plan._id)))
+
+    await ctx.db.patch(paymentPlan._id, {
+      nextInstallmentNumber,
+      status: 'active',
+      updatedAt: now,
+    })
+
+    await ctx.db.patch(args.debtId, {
+      balance: nextBalance,
+      remainingInstallments:
+        paymentPlan.installmentsTotal - nextInstallmentNumber + 1,
+      status: 'active',
+      currentPlanVersion: paymentPlan.version,
       updatedAt: now,
     })
   },

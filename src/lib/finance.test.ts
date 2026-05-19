@@ -80,6 +80,7 @@ const dashboardFixture: DashboardData = {
   recurringPayments: [],
   settings: {
     currency: 'USD',
+    enabledCurrencies: ['USD', 'PEN'],
     theme: 'dark',
     motion: 'full',
     lastUpdated: '2026-03-01T00:00:00.000Z',
@@ -112,7 +113,8 @@ describe('finance helpers', () => {
   })
 
   it('formats currency consistently', () => {
-    expect(formatCurrency(1234, 'USD')).toBe('$1,234')
+    expect(formatCurrency(1234, 'USD')).toBe('$1,234.00')
+    expect(formatCurrency(69.9, 'USD')).toBe('$69.90')
   })
 
   it('projects debt balance downward over time', () => {

@@ -1,7 +1,41 @@
 import type { Debt } from '@/lib/finance'
 
+function getLatestPlanPerVersion(debt: Debt) {
+  const latestPlanByVersion = new Map<
+    number,
+    NonNullable<Debt['installmentPlans']>[number]
+  >()
+
+  for (const plan of debt.installmentPlans ?? []) {
+    const existing = latestPlanByVersion.get(plan.version)
+    if (
+      !existing ||
+      plan.updatedAt > existing.updatedAt ||
+      (plan.updatedAt === existing.updatedAt &&
+        plan.createdAt >= existing.createdAt)
+    ) {
+      latestPlanByVersion.set(plan.version, plan)
+    }
+  }
+
+  return Array.from(latestPlanByVersion.values())
+}
+
+function getUniquePayments(debt: Debt) {
+  const paymentsById = new Map<
+    string,
+    NonNullable<Debt['installmentPayments']>[number]
+  >()
+
+  for (const payment of debt.installmentPayments ?? []) {
+    paymentsById.set(payment.id, payment)
+  }
+
+  return Array.from(paymentsById.values())
+}
+
 export function getDebtInstallmentState(debt: Debt) {
-  const plans = debt.installmentPlans ?? []
+  const plans = getLatestPlanPerVersion(debt)
   const activePlan =
     debt.activePlan ?? plans.find((plan) => plan.status === 'active') ?? null
   const fallbackTotalInstallments = Math.max(1, Math.round(debt.payments || 1))
@@ -23,7 +57,7 @@ export function getDebtInstallmentState(debt: Debt) {
     activePlan?.nextInstallmentNumber ?? fallbackPaidCount + 1,
   )
   const planVersion = activePlan?.version ?? debt.currentPlanVersion ?? 1
-  const payments = (debt.installmentPayments ?? [])
+  const payments = getUniquePayments(debt)
     .filter((payment) => payment.planVersion === planVersion)
     .sort(
       (left, right) =>
@@ -44,9 +78,9 @@ export function getDebtInstallmentState(debt: Debt) {
 }
 
 export function getDebtPlanHistory(debt: Debt) {
-  const payments = debt.installmentPayments ?? []
+  const payments = getUniquePayments(debt)
 
-  return (debt.installmentPlans ?? [])
+  return getLatestPlanPerVersion(debt)
     .slice()
     .sort((left, right) => left.version - right.version)
     .map((plan) => ({

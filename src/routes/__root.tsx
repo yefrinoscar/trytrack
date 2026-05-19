@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react'
@@ -45,6 +45,10 @@ type AuthDiagnostic = {
 type AuthResult = {
   token: string | null | undefined
   error: AuthDiagnostic | null
+}
+
+type StartupDiagnostic = {
+  message: string
 }
 
 const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
@@ -100,14 +104,18 @@ const getAuth = createServerFn({ method: 'GET' }).handler(async () => {
 
 interface MyRouterContext {
   queryClient: QueryClient
-  convexQueryClient: ConvexQueryClient
+  convexQueryClient: ConvexQueryClient | null
+  startupError: StartupDiagnostic | null
 }
 
 type RootRouteContext = MyRouterContext & {
   token?: string | null
   isAuthenticated?: boolean
   authError?: AuthDiagnostic | null
+  startupError?: StartupDiagnostic | null
 }
+
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'trytrack:sidebar-collapsed'
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   head: () => ({
@@ -150,6 +158,16 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         isAuthenticated: false,
         token: undefined,
         authError: null,
+        startupError: null,
+      }
+    }
+
+    if (opts.context.startupError) {
+      return {
+        isAuthenticated: false,
+        token: null,
+        authError: null,
+        startupError: opts.context.startupError,
       }
     }
 
@@ -160,11 +178,12 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         isAuthenticated: false,
         token: null,
         authError: auth.error,
+        startupError: null,
       }
     }
 
     if (token) {
-      opts.context.convexQueryClient.serverHttpClient?.setAuth(token)
+      opts.context.convexQueryClient?.serverHttpClient?.setAuth(token)
     }
 
     if (pathname.startsWith('/api/')) {
@@ -172,6 +191,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         isAuthenticated: !!token,
         token,
         authError: null,
+        startupError: null,
       }
     }
 
@@ -186,6 +206,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         isAuthenticated: Boolean(token),
         token,
         authError: null,
+        startupError: null,
       }
     }
 
@@ -201,6 +222,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       isAuthenticated: true,
       token,
       authError: null,
+      startupError: null,
     }
   },
   shellComponent: RootDocument,
@@ -215,9 +237,23 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     typeof window === 'undefined' ? null : getStoredDashboardSettings()
 
   const routeCtx = useRouteContext({ from: Route.id }) as RootRouteContext
-  const { queryClient, convexQueryClient, token, authError } = routeCtx
+  const { queryClient, convexQueryClient, token, authError, startupError } =
+    routeCtx
   const authLayoutRoutes = ['/login', '/forgot-password', '/reset-password']
   const isAuthLayout = authLayoutRoutes.includes(pathname)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY)
+    setIsSidebarCollapsed(stored === '1')
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      SIDEBAR_COLLAPSED_STORAGE_KEY,
+      isSidebarCollapsed ? '1' : '0',
+    )
+  }, [isSidebarCollapsed])
 
   return (
     <html
@@ -230,50 +266,104 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="font-sans antialiased [overflow-wrap:anywhere]">
-        <QueryClientProvider client={queryClient}>
-          <ConvexBetterAuthProvider
-            client={convexQueryClient.convexClient}
-            authClient={authClient}
-            initialToken={token ?? null}
-          >
-            <DashboardAppearanceSync />
-            {authError ? (
-              <AuthFailure error={authError} />
-            ) : isAuthLayout ? (
-              <div className="bg-background flex min-h-screen flex-col">
-                {children}
-              </div>
-            ) : (
-              <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col lg:px-4">
-                <div className="relative flex min-h-0 flex-1 flex-col">
-                  <Header />
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-[236px] lg:pt-10">
-                    <div className="shell-route-enter flex min-h-0 flex-1 flex-col">
-                      {children}
+        {startupError || !convexQueryClient ? (
+          <StartupFailure
+            error={
+              startupError ?? {
+                message:
+                  'Convex client failed to initialize before rendering the app.',
+              }
+            }
+          />
+        ) : (
+          <QueryClientProvider client={queryClient}>
+            <ConvexBetterAuthProvider
+              client={convexQueryClient.convexClient}
+              authClient={authClient}
+              initialToken={token ?? null}
+            >
+              <DashboardAppearanceSync />
+              {authError ? (
+                <AuthFailure error={authError} />
+              ) : isAuthLayout ? (
+                <div className="bg-background flex min-h-screen flex-col">
+                  {children}
+                </div>
+              ) : (
+                <div className="mx-auto flex min-h-screen w-full max-w-[1320px] flex-col lg:px-4">
+                  <div className="relative flex min-h-0 flex-1 flex-col">
+                    <Header
+                      isCollapsed={isSidebarCollapsed}
+                      onToggleCollapsed={() =>
+                        setIsSidebarCollapsed((current) => !current)
+                      }
+                    />
+                    <div
+                      className={`flex min-h-0 min-w-0 flex-1 flex-col lg:pt-10 ${
+                        isSidebarCollapsed ? 'lg:pl-[88px]' : 'lg:pl-[236px]'
+                      }`}
+                    >
+                      <div className="shell-route-enter flex min-h-0 flex-1 flex-col">
+                        {children}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {showDevtools ? (
-              <TanStackDevtools
-                config={{
-                  position: 'bottom-right',
-                }}
-                plugins={[
-                  {
-                    name: 'Tanstack Router',
-                    render: <TanStackRouterDevtoolsPanel />,
-                  },
-                  TanStackQueryDevtools,
-                ]}
-              />
-            ) : null}
-          </ConvexBetterAuthProvider>
-        </QueryClientProvider>
+              )}
+              {showDevtools ? (
+                <TanStackDevtools
+                  config={{
+                    position: 'bottom-right',
+                  }}
+                  plugins={[
+                    {
+                      name: 'Tanstack Router',
+                      render: <TanStackRouterDevtoolsPanel />,
+                    },
+                    TanStackQueryDevtools,
+                  ]}
+                />
+              ) : null}
+            </ConvexBetterAuthProvider>
+          </QueryClientProvider>
+        )}
         <Scripts />
       </body>
     </html>
+  )
+}
+
+function StartupFailure({ error }: { error: StartupDiagnostic }) {
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-[980px] flex-col justify-center px-6 py-12">
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-sm font-medium">
+            Startup configuration failed
+          </p>
+          <h1 className="text-foreground text-2xl font-semibold">
+            App initialization stopped before the first route render.
+          </h1>
+        </div>
+        <div className="rounded-md border border-border bg-sidebar/40 p-4">
+          <p className="text-foreground text-sm">{error.message}</p>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold">Fix checklist</h2>
+          <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+            <li>
+              Set `VITE_CONVEX_URL` to
+              `https://&lt;deployment&gt;.convex.cloud`.
+            </li>
+            <li>
+              Set `VITE_CONVEX_SITE_URL` to
+              `https://&lt;deployment&gt;.convex.site`.
+            </li>
+            <li>Restart `vp dev` after updating env variables.</li>
+          </ul>
+        </div>
+      </div>
+    </main>
   )
 }
 
