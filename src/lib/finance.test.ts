@@ -43,6 +43,7 @@ const dashboardFixture: DashboardData = {
       createdAt: '2026-03-15T00:00:00.000Z',
     },
   ],
+  emailExpenseImports: [],
   incomes: [
     {
       id: 'income-1',

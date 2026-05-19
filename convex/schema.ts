@@ -123,4 +123,37 @@ export default defineSchema({
     .index('by_userId_and_spentAt', ['userId', 'spentAt'])
     .index('by_userId_and_category', ['userId', 'category'])
     .index('by_userId_and_currency', ['userId', 'currency']),
+
+  emailExpenseImports: defineTable({
+    userId: v.optional(v.id('users')),
+    userEmail: v.string(),
+    provider: v.string(),
+    emailId: v.string(),
+    messageId: v.optional(v.string()),
+    from: v.optional(v.string()),
+    to: v.array(v.string()),
+    subject: v.optional(v.string()),
+    textSnippet: v.optional(v.string()),
+    htmlSnippet: v.optional(v.string()),
+    merchant: v.optional(v.string()),
+    amount: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    spentAt: v.optional(v.string()),
+    occurredAt: v.optional(v.string()),
+    source: v.optional(v.string()),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('needs_review'),
+      v.literal('confirmed'),
+      v.literal('dismissed'),
+    ),
+    error: v.optional(v.string()),
+    confirmedExpenseId: v.optional(v.id('expenses')),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_emailId', ['emailId'])
+    .index('by_userId_and_status', ['userId', 'status'])
+    .index('by_userEmail_and_status', ['userEmail', 'status'])
+    .index('by_userId_and_createdAt', ['userId', 'createdAt']),
 })

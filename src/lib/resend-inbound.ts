@@ -1,4 +1,7 @@
 import { logError, logInfo, logWarn } from './server-logger'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '../../convex/_generated/api'
+import { parseEmailExpense } from './email-expense-parser'
 
 interface ResendAttachmentMetadata {
   id?: string
@@ -264,6 +267,66 @@ async function retrieveReceivedEmail(emailId: string, request: Request) {
   return (await response.json()) as ResendReceivedEmail
 }
 
+async function saveEmailExpenseImport({
+  email,
+  request,
+  summary,
+}: {
+  email: ResendReceivedEmail
+  request: Request
+  summary: ReturnType<typeof summarizeReceivedEmail>
+}) {
+  const convexUrl =
+    getRuntimeEnv('VITE_CONVEX_URL', request) ??
+    getRuntimeEnv('CONVEX_URL', request)
+
+  if (!convexUrl) {
+    logWarn({
+      event: 'resend.email_import.not_saved',
+      message: 'VITE_CONVEX_URL is not configured; skipping import save.',
+      request,
+      context: { emailId: summary.emailId },
+    })
+    return null
+  }
+
+  const parsed = parseEmailExpense({
+    text: email.text ?? '',
+    from: email.from ?? summary.from,
+  })
+
+  if (!parsed.ownerEmail) {
+    logWarn({
+      event: 'resend.email_import.no_owner',
+      message: 'Could not detect the TryTrack owner email from inbound email.',
+      request,
+      context: { emailId: summary.emailId, parserError: parsed.error ?? null },
+    })
+    return null
+  }
+
+  const client = new ConvexHttpClient(convexUrl)
+
+  return await client.mutation(api.expenses.importFromEmail, {
+    userEmail: parsed.ownerEmail,
+    provider: 'resend',
+    emailId: summary.emailId,
+    ...(summary.messageId ? { messageId: summary.messageId } : {}),
+    ...(summary.from ? { from: summary.from } : {}),
+    to: summary.to,
+    ...(summary.subject ? { subject: summary.subject } : {}),
+    ...(email.text ? { textSnippet: truncate(email.text, 2000) ?? '' } : {}),
+    ...(email.html ? { htmlSnippet: truncate(email.html, 2000) ?? '' } : {}),
+    ...(parsed.merchant ? { merchant: parsed.merchant } : {}),
+    ...(typeof parsed.amount === 'number' ? { amount: parsed.amount } : {}),
+    ...(parsed.currency ? { currency: parsed.currency } : {}),
+    ...(parsed.spentAt ? { spentAt: parsed.spentAt } : {}),
+    ...(parsed.occurredAt ? { occurredAt: parsed.occurredAt } : {}),
+    ...(parsed.source ? { source: parsed.source } : {}),
+    ...(parsed.error ? { error: parsed.error } : {}),
+  })
+}
+
 function summarizeReceivedEmail(event: ResendEmailReceivedEvent) {
   return {
     emailId: event.data.email_id,
@@ -360,6 +423,25 @@ export async function handleResendInboundEmail(request: Request) {
   }
 
   const retrievedSummary = summarizeRetrievedEmail(retrievedEmail)
+  let importId: string | null = null
+
+  if (retrievedEmail) {
+    try {
+      importId = await saveEmailExpenseImport({
+        email: retrievedEmail,
+        request,
+        summary,
+      })
+    } catch (error) {
+      logError({
+        event: 'resend.email_import.save_failed',
+        message: 'Failed to save parsed email expense import.',
+        request,
+        context: { emailId: summary.emailId },
+        error,
+      })
+    }
+  }
 
   logInfo({
     event: 'resend.email.received',
@@ -368,6 +450,7 @@ export async function handleResendInboundEmail(request: Request) {
     context: {
       ...summary,
       retrieved: Boolean(retrievedEmail),
+      importId,
       content: retrievedSummary,
     },
   })
@@ -376,6 +459,7 @@ export async function handleResendInboundEmail(request: Request) {
     ok: true,
     event: 'email.received',
     email: summary,
+    importId,
     content: retrievedSummary,
   })
 }

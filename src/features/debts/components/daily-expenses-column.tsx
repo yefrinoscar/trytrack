@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button'
 import type { FinanceActions } from '@/features/finance/shared'
 import { parseMoney } from '@/features/finance/shared'
 import { formatCurrency } from '@/lib/finance'
-import type { Expense } from '@/lib/finance'
+import type { EmailExpenseImport, Expense } from '@/lib/finance'
 
 interface DailyExpensesColumnProps {
   expenses: Expense[]
+  emailExpenseImports: EmailExpenseImport[]
   defaultCurrency: string
   actions: FinanceActions
 }
@@ -23,6 +24,7 @@ function todayKey() {
 
 export function DailyExpensesColumn({
   expenses,
+  emailExpenseImports,
   defaultCurrency,
   actions,
 }: DailyExpensesColumnProps) {
@@ -132,6 +134,58 @@ export function DailyExpensesColumn({
           <p className="mt-2 text-xs text-destructive">{error}</p>
         ) : null}
       </div>
+
+      {emailExpenseImports.length ? (
+        <div className="mt-3 space-y-2">
+          <p className="eyebrow">Email review</p>
+          {emailExpenseImports.map((item) => (
+            <div key={item.id} className="rounded-lg bg-muted p-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {item.merchant ?? item.subject ?? 'Email expense'}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {item.spentAt ?? 'No date'} · {item.source ?? 'email'}
+                  </p>
+                </div>
+                <p className="font-mono text-sm font-semibold text-foreground">
+                  {typeof item.amount === 'number'
+                    ? formatCurrency(
+                        item.amount,
+                        item.currency ?? defaultCurrency,
+                      )
+                    : '--'}
+                </p>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={actions.isWorking}
+                  onClick={() => {
+                    void actions.confirmEmailExpenseImport(item.id)
+                  }}
+                >
+                  Add expense
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={actions.isWorking}
+                  onClick={() => {
+                    void actions.dismissEmailExpenseImport(item.id)
+                  }}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-3 space-y-2">
         {todayExpenses.length ? (

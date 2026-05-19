@@ -42,6 +42,7 @@ function DebtsView({
 
         <DailyExpensesColumn
           expenses={data.expenses}
+          emailExpenseImports={data.emailExpenseImports}
           defaultCurrency={defaultCurrency}
           actions={actions}
         />
