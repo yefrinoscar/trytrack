@@ -42,6 +42,52 @@ function normalizeDate(value: string | undefined) {
   return `${year}-${month}-${day}`
 }
 
+const spanishMonthByName: Record<string, string> = {
+  enero: '01',
+  febrero: '02',
+  marzo: '03',
+  abril: '04',
+  mayo: '05',
+  junio: '06',
+  julio: '07',
+  agosto: '08',
+  septiembre: '09',
+  setiembre: '09',
+  octubre: '10',
+  noviembre: '11',
+  diciembre: '12',
+}
+
+function normalizeSpanishDateTime(value: string | undefined) {
+  if (!value) {
+    return {}
+  }
+
+  const match = value
+    .trim()
+    .match(/^(\d{1,2})\s+de\s+([a-záéíóúñ]+),\s*(\d{4})\s+(\d{1,2}:\d{2})$/i)
+
+  if (!match) {
+    return {}
+  }
+
+  const day = match[1]!.padStart(2, '0')
+  const month = spanishMonthByName[match[2]!.toLowerCase()]
+  const year = match[3]!
+  const hour = match[4]!
+
+  if (!month) {
+    return {}
+  }
+
+  const spentAt = `${year}-${month}-${day}`
+
+  return {
+    spentAt,
+    occurredAt: `${spentAt}T${hour}:00`,
+  }
+}
+
 function normalizeAmount(value: string | undefined) {
   if (!value) {
     return undefined
@@ -59,7 +105,15 @@ function extractOwnerEmail(text: string, fallback?: string | null) {
   const forwardedTo = text.match(/^(?:To|Para):\s*<?([^>\s]+@[^>\s]+)>?/im)?.[1]
   const fallbackEmail = fallback?.match(/<?([^<>\s]+@[^<>\s]+)>?/)?.[1]
 
-  return forwardedTo ?? fallbackEmail
+  return (forwardedTo ?? fallbackEmail)?.toLowerCase()
+}
+
+function parseCurrencySymbol(value: string | undefined) {
+  if (!value) {
+    return undefined
+  }
+
+  return value === 'S/' ? 'PEN' : 'USD'
 }
 
 export function parseEmailExpense({
@@ -70,6 +124,33 @@ export function parseEmailExpense({
   from?: string | null
 }): ParsedEmailExpense {
   const ownerEmail = extractOwnerEmail(text, from)
+
+  const plinMatch = text.match(
+    /Plineaste\s+(S\/|\$)\s*([\d,.]+)\s+a\s+([^\n]+)/i,
+  )
+
+  if (plinMatch) {
+    const currency = parseCurrencySymbol(plinMatch[1])
+    const amount = normalizeAmount(plinMatch[2])
+    const merchant = cleanField(plinMatch[3] ?? '')
+    const { spentAt, occurredAt } = normalizeSpanishDateTime(
+      text.match(/Fecha y hora:\s*([^\n]+)/i)?.[1],
+    )
+
+    return {
+      ownerEmail,
+      merchant,
+      amount,
+      currency,
+      spentAt,
+      occurredAt,
+      source: 'bbva-plin-transfer',
+      error:
+        merchant && amount && currency && spentAt
+          ? undefined
+          : 'Could not parse all BBVA PLIN expense fields',
+    }
+  }
 
   if (/Has realizado el siguiente consumo:/i.test(text)) {
     const merchant = extractLabeledField(text, 'Comercio')
