@@ -326,13 +326,7 @@ function isMissingCategory(item: EmailExpenseImport) {
   return !item.category?.trim()
 }
 
-function ExpenseCategoryChart({
-  emailExpenseImports,
-  expenses,
-}: {
-  emailExpenseImports: EmailExpenseImport[]
-  expenses: Expense[]
-}) {
+function ExpenseCategoryChart({ expenses }: { expenses: Expense[] }) {
   const monthKey = todayKey().slice(0, 7)
   const { currency, rows, total } = useMemo(() => {
     const categories = new Map<
@@ -373,32 +367,6 @@ function ExpenseCategoryChart({
       addCategory(category, expense.currency, expense.amount)
     }
 
-    const optimisticEmailExpenseIds = new Set(
-      expenses
-        .map((expense) => expense.id)
-        .filter((id) => id.startsWith('expense-email-')),
-    )
-
-    for (const item of emailExpenseImports) {
-      if (
-        typeof item.amount !== 'number' ||
-        !item.currency ||
-        !item.spentAt?.startsWith(monthKey)
-      ) {
-        continue
-      }
-
-      if (optimisticEmailExpenseIds.has(`expense-email-${item.emailId}`)) {
-        continue
-      }
-
-      addCategory(
-        isMissingCategory(item) ? 'Needs category' : item.category!.trim(),
-        item.currency,
-        item.amount,
-      )
-    }
-
     const selectedCurrency =
       [...currencyTotals.entries()].sort(
         (left, right) => right[1] - left[1],
@@ -424,7 +392,7 @@ function ExpenseCategoryChart({
       rows: visibleRows,
       total: rankedRows.reduce((sum, row) => sum + row.total, 0),
     }
-  }, [emailExpenseImports, expenses, monthKey])
+  }, [expenses, monthKey])
   const topCategory = rows[0] ?? null
 
   if (!rows.length) {
@@ -693,10 +661,7 @@ export function DailyExpensesColumn({
         ) : null}
       </div>
 
-      <ExpenseCategoryChart
-        emailExpenseImports={emailExpenseImports}
-        expenses={expenses}
-      />
+      <ExpenseCategoryChart expenses={expenses} />
 
       {emailExpenseImports.length ? (
         <div className="mt-3 space-y-2">
