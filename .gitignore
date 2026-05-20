@@ -21,3 +21,5 @@ convex/_generated/*
 !convex/_generated/server.d.ts
 !convex/_generated/server.js
 convex/*.js
+
+secrets

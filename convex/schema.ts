@@ -141,6 +141,7 @@ export default defineSchema({
     spentAt: v.optional(v.string()),
     occurredAt: v.optional(v.string()),
     source: v.optional(v.string()),
+    dedupeKey: v.optional(v.string()),
     status: v.union(
       v.literal('pending'),
       v.literal('needs_review'),
@@ -153,7 +154,17 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index('by_emailId', ['emailId'])
+    .index('by_messageId', ['messageId'])
+    .index('by_dedupeKey', ['dedupeKey'])
     .index('by_userId_and_status', ['userId', 'status'])
     .index('by_userEmail_and_status', ['userEmail', 'status'])
     .index('by_userId_and_createdAt', ['userId', 'createdAt']),
+
+  gmailSyncStates: defineTable({
+    userEmail: v.string(),
+    historyId: v.optional(v.string()),
+    watchExpiration: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_userEmail', ['userEmail']),
 })

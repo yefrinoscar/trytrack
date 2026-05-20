@@ -48,6 +48,25 @@ interface ResendReceivedEmail {
   attachments?: ResendAttachmentMetadata[]
 }
 
+interface ResendReceivedEmailListItem {
+  id: string
+  to?: string[]
+  from?: string
+  created_at?: string
+  subject?: string
+  bcc?: string[]
+  cc?: string[]
+  reply_to?: string[]
+  message_id?: string
+  attachments?: ResendAttachmentMetadata[]
+}
+
+interface ResendReceivedEmailList {
+  object?: 'list'
+  has_more?: boolean
+  data?: ResendReceivedEmailListItem[]
+}
+
 type ResendWebhookEvent =
   | ResendEmailReceivedEvent
   | {
@@ -210,6 +229,19 @@ function truncate(value: string | null | undefined, maxLength = 500) {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
 }
 
+function parseResendTimestamp(value: string | undefined) {
+  if (!value) {
+    return Number.NaN
+  }
+
+  const normalized = value
+    .replace(' ', 'T')
+    .replace(/(\.\d{3})\d+/, '$1')
+    .replace(/([+-]\d{2})$/, '$1:00')
+
+  return Date.parse(normalized)
+}
+
 function summarizeRetrievedEmail(email: ResendReceivedEmail | null) {
   if (!email) {
     return null
@@ -231,6 +263,48 @@ function summarizeRetrievedEmail(email: ResendReceivedEmail | null) {
     raw: email.raw ?? null,
     attachments: email.attachments ?? [],
   }
+}
+
+async function listReceivedEmails({
+  after,
+  request,
+}: {
+  after?: string
+  request: Request
+}) {
+  const apiKey = getRuntimeEnv('RESEND_API_KEY', request)
+
+  if (!apiKey) {
+    logWarn({
+      event: 'resend.received_email.list_skipped',
+      message: 'RESEND_API_KEY is not configured; skipping email list.',
+      request,
+    })
+    return null
+  }
+
+  const url = new URL('https://api.resend.com/emails/receiving')
+  url.searchParams.set('limit', '100')
+  if (after) {
+    url.searchParams.set('after', after)
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      'content-type': 'application/json',
+    },
+    method: 'GET',
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
+    throw new Error(
+      `Resend received email list failed with ${response.status}: ${truncate(errorText, 300) ?? ''}`,
+    )
+  }
+
+  return (await response.json()) as ResendReceivedEmailList
 }
 
 async function retrieveReceivedEmail(emailId: string, request: Request) {
@@ -305,6 +379,16 @@ async function saveEmailExpenseImport({
     return null
   }
 
+  if (parsed.ignore) {
+    logInfo({
+      event: 'resend.email_import.ignored',
+      message: 'Parsed email was intentionally ignored.',
+      request,
+      context: { emailId: summary.emailId, parserError: parsed.error ?? null },
+    })
+    return null
+  }
+
   const client = new ConvexHttpClient(convexUrl)
 
   return await client.mutation(api.expenses.importFromEmail, {
@@ -323,8 +407,68 @@ async function saveEmailExpenseImport({
     ...(parsed.spentAt ? { spentAt: parsed.spentAt } : {}),
     ...(parsed.occurredAt ? { occurredAt: parsed.occurredAt } : {}),
     ...(parsed.source ? { source: parsed.source } : {}),
+    ...(() => {
+      const dedupeKey = createEmailExpenseDedupeKey({
+        amount: parsed.amount,
+        currency: parsed.currency,
+        merchant: parsed.merchant,
+        ownerEmail: parsed.ownerEmail,
+        source: parsed.source,
+        spentAt: parsed.spentAt,
+      })
+      return dedupeKey ? { dedupeKey } : {}
+    })(),
     ...(parsed.error ? { error: parsed.error } : {}),
   })
+}
+
+function summarizeListItemEmail(email: ResendReceivedEmailListItem) {
+  return {
+    emailId: email.id,
+    messageId: email.message_id ?? null,
+    from: email.from ?? null,
+    to: email.to ?? [],
+    cc: email.cc ?? [],
+    bcc: email.bcc ?? [],
+    subject: email.subject ?? null,
+    receivedAt: email.created_at ?? null,
+    attachments: email.attachments ?? [],
+  }
+}
+
+function createEmailExpenseDedupeKey({
+  amount,
+  currency,
+  merchant,
+  ownerEmail,
+  source,
+  spentAt,
+}: {
+  amount?: number
+  currency?: string
+  merchant?: string
+  ownerEmail: string
+  source?: string
+  spentAt?: string
+}) {
+  if (!amount || !currency || !merchant || !source || !spentAt) {
+    return undefined
+  }
+
+  return [
+    ownerEmail.toLowerCase(),
+    source,
+    merchant
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/^PLIN-/i, '')
+      .replace(/[^a-z0-9]+/gi, ' ')
+      .trim()
+      .toLowerCase(),
+    currency,
+    amount.toFixed(2),
+    spentAt,
+  ].join('|')
 }
 
 function summarizeReceivedEmail(event: ResendEmailReceivedEvent) {
@@ -351,6 +495,111 @@ function isEmailReceivedEvent(
     'email_id' in event.data &&
     typeof event.data.email_id === 'string'
   )
+}
+
+export async function backfillResendReceivedEmails({
+  end,
+  request,
+  start,
+}: {
+  end: Date
+  request: Request
+  start: Date
+}) {
+  const startMs = start.getTime()
+  const endMs = end.getTime()
+
+  if (
+    !Number.isFinite(startMs) ||
+    !Number.isFinite(endMs) ||
+    startMs >= endMs
+  ) {
+    return jsonResponse(
+      { error: 'Invalid date range. Use start before end.' },
+      { status: 400 },
+    )
+  }
+
+  let after: string | undefined
+  let scanned = 0
+  let matched = 0
+  let saved = 0
+  let skippedWithoutContent = 0
+  let stoppedAtOlderEmail = false
+
+  while (true) {
+    const page = await listReceivedEmails({ after, request })
+
+    if (!page) {
+      return jsonResponse(
+        { error: 'RESEND_API_KEY is not configured.' },
+        { status: 501 },
+      )
+    }
+
+    const items = page?.data ?? []
+
+    if (!items.length) {
+      break
+    }
+
+    for (const item of items) {
+      scanned += 1
+      const receivedMs = parseResendTimestamp(item.created_at)
+
+      if (!Number.isFinite(receivedMs)) {
+        continue
+      }
+
+      if (receivedMs < startMs) {
+        stoppedAtOlderEmail = true
+        break
+      }
+
+      if (receivedMs >= endMs) {
+        continue
+      }
+
+      matched += 1
+      const email = await retrieveReceivedEmail(item.id, request)
+
+      if (!email) {
+        skippedWithoutContent += 1
+        continue
+      }
+
+      const importId = await saveEmailExpenseImport({
+        email,
+        request,
+        summary: summarizeListItemEmail(item),
+      })
+
+      if (importId) {
+        saved += 1
+      }
+    }
+
+    if (stoppedAtOlderEmail || !page?.has_more) {
+      break
+    }
+
+    after = items.at(-1)?.id
+    if (!after) {
+      break
+    }
+  }
+
+  return jsonResponse({
+    ok: true,
+    scanned,
+    matched,
+    saved,
+    skippedWithoutContent,
+    range: {
+      start: start.toISOString(),
+      end: end.toISOString(),
+    },
+  })
 }
 
 export async function handleResendInboundEmail(request: Request) {

@@ -11,6 +11,7 @@
 import type * as auth from "../auth.js";
 import type * as debts from "../debts.js";
 import type * as expenses from "../expenses.js";
+import type * as gmailSync from "../gmailSync.js";
 import type * as http from "../http.js";
 import type * as monthlySpend from "../monthlySpend.js";
 import type * as recurringPayments from "../recurringPayments.js";
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   debts: typeof debts;
   expenses: typeof expenses;
+  gmailSync: typeof gmailSync;
   http: typeof http;
   monthlySpend: typeof monthlySpend;
   recurringPayments: typeof recurringPayments;

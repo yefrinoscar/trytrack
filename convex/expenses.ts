@@ -1,7 +1,63 @@
-import { query, mutation } from './_generated/server'
+import { query, mutation, internalMutation } from './_generated/server'
 import { ConvexError } from 'convex/values'
 import { v } from 'convex/values'
 import { authComponent } from './auth'
+
+type EmailExpenseImportRow = {
+  userEmail: string
+  source?: string
+  merchant?: string
+  amount?: number
+  currency?: string
+  spentAt?: string
+}
+
+function normalizeImportedMerchant(value: string | undefined) {
+  return value
+    ?.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^PLIN-/i, '')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function isInternalTransferMerchant(value: string | undefined) {
+  const merchant = normalizeImportedMerchant(value)
+
+  return Boolean(
+    merchant &&
+    (merchant.includes('yefrin o laura c') ||
+      merchant.includes('yefrin oscar laura') ||
+      merchant.includes('yefrin oscar laur') ||
+      merchant.includes('yefrioscar')),
+  )
+}
+
+function getEmailImportFingerprint(row: EmailExpenseImportRow) {
+  if (!row.amount || !row.currency || !row.spentAt) {
+    return null
+  }
+
+  return [
+    row.userEmail.toLowerCase(),
+    row.source ?? 'email',
+    normalizeImportedMerchant(row.merchant) ?? '',
+    row.currency,
+    row.amount.toFixed(2),
+    row.spentAt,
+  ].join('|')
+}
+
+function getStrictEmailImportFingerprint(
+  row: EmailExpenseImportRow & { occurredAt?: string },
+) {
+  const fingerprint = getEmailImportFingerprint(row)
+
+  return fingerprint && row.occurredAt
+    ? `${fingerprint}|${row.occurredAt}`
+    : fingerprint
+}
 
 export const listByUser = query({
   args: { userId: v.id('users') },
@@ -97,6 +153,7 @@ export const importFromEmail = mutation({
     spentAt: v.optional(v.string()),
     occurredAt: v.optional(v.string()),
     source: v.optional(v.string()),
+    dedupeKey: v.optional(v.string()),
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -107,6 +164,53 @@ export const importFromEmail = mutation({
 
     if (existing) {
       return existing._id
+    }
+
+    if (args.messageId) {
+      const existingByMessageId = await ctx.db
+        .query('emailExpenseImports')
+        .withIndex('by_messageId', (q) => q.eq('messageId', args.messageId))
+        .first()
+
+      if (existingByMessageId) {
+        return existingByMessageId._id
+      }
+    }
+
+    if (args.dedupeKey) {
+      const existingByDedupeKey = await ctx.db
+        .query('emailExpenseImports')
+        .withIndex('by_dedupeKey', (q) => q.eq('dedupeKey', args.dedupeKey))
+        .first()
+
+      if (existingByDedupeKey) {
+        return existingByDedupeKey._id
+      }
+    }
+
+    const importFingerprint = getEmailImportFingerprint(args)
+    if (importFingerprint) {
+      for (const status of [
+        'pending',
+        'needs_review',
+        'confirmed',
+        'dismissed',
+      ] as const) {
+        const existingImports = await ctx.db
+          .query('emailExpenseImports')
+          .withIndex('by_userEmail_and_status', (q) =>
+            q.eq('userEmail', args.userEmail).eq('status', status),
+          )
+          .take(250)
+
+        const existingImport = existingImports.find(
+          (row) => getEmailImportFingerprint(row) === importFingerprint,
+        )
+
+        if (existingImport) {
+          return existingImport._id
+        }
+      }
     }
 
     const user = await ctx.db
@@ -137,6 +241,7 @@ export const importFromEmail = mutation({
       spentAt: args.spentAt,
       occurredAt: args.occurredAt,
       source: args.source,
+      dedupeKey: args.dedupeKey,
       status: user && hasParsedExpense ? 'pending' : 'needs_review',
       error: user ? args.error : `No TryTrack user found for ${args.userEmail}`,
       createdAt: now,
@@ -162,18 +267,194 @@ export const listPendingEmailImports = query({
       return []
     }
 
-    return await ctx.db
-      .query('emailExpenseImports')
-      .withIndex('by_userId_and_status', (q) =>
-        q.eq('userId', user._id).eq('status', 'pending'),
+    const rows = (
+      await Promise.all(
+        (['pending', 'confirmed'] as const).map((status) =>
+          ctx.db
+            .query('emailExpenseImports')
+            .withIndex('by_userId_and_status', (q) =>
+              q.eq('userId', user._id).eq('status', status),
+            )
+            .order('desc')
+            .take(250),
+        ),
       )
-      .order('desc')
-      .take(25)
+    )
+      .flat()
+      .sort((left, right) => right.createdAt - left.createdAt)
+      .slice(0, 250)
+
+    const seen = new Set<string>()
+    const uniqueRows = []
+
+    for (const row of rows) {
+      if (isInternalTransferMerchant(row.merchant)) {
+        continue
+      }
+
+      const fingerprint = row.dedupeKey ?? getEmailImportFingerprint(row)
+      if (fingerprint && seen.has(fingerprint)) {
+        continue
+      }
+
+      if (fingerprint) {
+        seen.add(fingerprint)
+      }
+
+      uniqueRows.push(row)
+    }
+
+    return await Promise.all(
+      uniqueRows.map(async (row) => {
+        if (!row.confirmedExpenseId) {
+          return row
+        }
+
+        const expense = await ctx.db.get(row.confirmedExpenseId)
+
+        return {
+          ...row,
+          category: expense?.category,
+        }
+      }),
+    )
+  },
+})
+
+export const dismissPendingEmailImportsOutsideSpentAtRange = internalMutation({
+  args: {
+    start: v.string(),
+    end: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query('emailExpenseImports').take(500)
+    const now = Date.now()
+    let dismissed = 0
+
+    for (const row of rows) {
+      if (!row.spentAt || row.spentAt < args.start || row.spentAt >= args.end) {
+        await ctx.db.patch(row._id, {
+          status: 'dismissed',
+          updatedAt: now,
+        })
+        dismissed += 1
+      }
+    }
+
+    return { dismissed }
+  },
+})
+
+export const dismissInternalTransferAndDuplicateEmailImports = internalMutation(
+  {
+    args: {},
+    handler: async (ctx) => {
+      const rows = await ctx.db.query('emailExpenseImports').take(1000)
+      const now = Date.now()
+      const seen = new Set<string>()
+      let dismissedInternal = 0
+      let dismissedDuplicates = 0
+
+      for (const row of rows) {
+        if (row.status !== 'pending') {
+          continue
+        }
+
+        if (isInternalTransferMerchant(row.merchant)) {
+          await ctx.db.patch(row._id, {
+            status: 'dismissed',
+            updatedAt: now,
+          })
+          dismissedInternal += 1
+          continue
+        }
+
+        if (!row.amount || !row.currency || !row.spentAt) {
+          continue
+        }
+
+        const key = row.dedupeKey ?? getEmailImportFingerprint(row)
+
+        if (!key) {
+          continue
+        }
+
+        if (seen.has(key)) {
+          await ctx.db.patch(row._id, {
+            status: 'dismissed',
+            updatedAt: now,
+          })
+          dismissedDuplicates += 1
+          continue
+        }
+
+        seen.add(key)
+      }
+
+      return { dismissedDuplicates, dismissedInternal }
+    },
+  },
+)
+
+export const deleteDuplicateEmailImports = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query('emailExpenseImports').take(1000)
+    const byFingerprint = new Map<string, typeof rows>()
+    let deleted = 0
+
+    for (const row of rows) {
+      const fingerprint = getStrictEmailImportFingerprint(row)
+
+      if (!fingerprint) {
+        continue
+      }
+
+      byFingerprint.set(fingerprint, [
+        ...(byFingerprint.get(fingerprint) ?? []),
+        row,
+      ])
+    }
+
+    const statusRank = {
+      confirmed: 0,
+      pending: 1,
+      needs_review: 2,
+      dismissed: 3,
+    } as const
+
+    for (const duplicateRows of byFingerprint.values()) {
+      if (duplicateRows.length < 2) {
+        continue
+      }
+
+      const [keeper, ...duplicates] = duplicateRows
+        .slice()
+        .sort(
+          (left, right) =>
+            statusRank[left.status] - statusRank[right.status] ||
+            right.updatedAt - left.updatedAt,
+        )
+
+      for (const duplicate of duplicates) {
+        if (duplicate._id === keeper?._id) {
+          continue
+        }
+
+        await ctx.db.delete(duplicate._id)
+        deleted += 1
+      }
+    }
+
+    return { deleted }
   },
 })
 
 export const confirmEmailImport = mutation({
-  args: { id: v.id('emailExpenseImports') },
+  args: {
+    id: v.id('emailExpenseImports'),
+    category: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const authUser = await authComponent.safeGetAuthUser(ctx)
     if (!authUser?.email) {
@@ -194,18 +475,72 @@ export const confirmEmailImport = mutation({
       throw new ConvexError('Email expense is missing parsed fields')
     }
 
+    if (isInternalTransferMerchant(row.merchant)) {
+      await ctx.db.patch(row._id, {
+        status: 'dismissed',
+        updatedAt: Date.now(),
+      })
+      throw new ConvexError('Internal transfer ignored')
+    }
+
+    const matchingExpenses = await ctx.db
+      .query('expenses')
+      .withIndex('by_userId_and_spentAt', (q) =>
+        q.eq('userId', user._id).eq('spentAt', row.spentAt!),
+      )
+      .take(100)
+    const existingExpense = matchingExpenses.find(
+      (expense) =>
+        expense.amount === row.amount &&
+        expense.currency === row.currency &&
+        normalizeImportedMerchant(expense.merchant ?? expense.description) ===
+          normalizeImportedMerchant(row.merchant ?? row.subject),
+    )
     const now = Date.now()
+
+    if (existingExpense) {
+      await ctx.db.patch(row._id, {
+        status: 'confirmed',
+        confirmedExpenseId: existingExpense._id,
+        updatedAt: now,
+      })
+      return existingExpense._id
+    }
+
     const expenseId = await ctx.db.insert('expenses', {
       userId: user._id,
       amount: row.amount,
       currency: row.currency,
-      category: 'Email import',
+      category: args.category?.trim() || 'Email import',
       description: row.merchant ?? row.subject ?? 'Email expense',
       merchant: row.merchant,
       spentAt: row.spentAt,
       createdAt: now,
       updatedAt: now,
     })
+
+    const rowFingerprint = row.dedupeKey ?? getEmailImportFingerprint(row)
+    if (rowFingerprint) {
+      const siblingRows = await ctx.db
+        .query('emailExpenseImports')
+        .withIndex('by_userId_and_status', (q) =>
+          q.eq('userId', user._id).eq('status', 'pending'),
+        )
+        .take(250)
+
+      for (const siblingRow of siblingRows) {
+        if (
+          siblingRow._id !== row._id &&
+          (siblingRow.dedupeKey ?? getEmailImportFingerprint(siblingRow)) ===
+            rowFingerprint
+        ) {
+          await ctx.db.patch(siblingRow._id, {
+            status: 'dismissed',
+            updatedAt: now,
+          })
+        }
+      }
+    }
 
     await ctx.db.patch(row._id, {
       status: 'confirmed',

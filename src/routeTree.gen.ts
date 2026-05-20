@@ -19,7 +19,12 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DebtsRouteImport } from './routes/debts'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiEmailInboundRouteImport } from './routes/api/email/inbound'
+import { Route as ApiEmailBackfillRouteImport } from './routes/api/email/backfill'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiEmailGmailWebhookRouteImport } from './routes/api/email/gmail/webhook'
+import { Route as ApiEmailGmailWatchRouteImport } from './routes/api/email/gmail/watch'
+import { Route as ApiEmailGmailSyncRouteImport } from './routes/api/email/gmail/sync'
+import { Route as ApiEmailGmailPollRouteImport } from './routes/api/email/gmail/poll'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -71,9 +76,34 @@ const ApiEmailInboundRoute = ApiEmailInboundRouteImport.update({
   path: '/api/email/inbound',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEmailBackfillRoute = ApiEmailBackfillRouteImport.update({
+  id: '/api/email/backfill',
+  path: '/api/email/backfill',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmailGmailWebhookRoute = ApiEmailGmailWebhookRouteImport.update({
+  id: '/api/email/gmail/webhook',
+  path: '/api/email/gmail/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmailGmailWatchRoute = ApiEmailGmailWatchRouteImport.update({
+  id: '/api/email/gmail/watch',
+  path: '/api/email/gmail/watch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmailGmailSyncRoute = ApiEmailGmailSyncRouteImport.update({
+  id: '/api/email/gmail/sync',
+  path: '/api/email/gmail/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmailGmailPollRoute = ApiEmailGmailPollRouteImport.update({
+  id: '/api/email/gmail/poll',
+  path: '/api/email/gmail/poll',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -88,7 +118,12 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
+  '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
+  '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
+  '/api/email/gmail/webhook': typeof ApiEmailGmailWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -101,7 +136,12 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
+  '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
+  '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
+  '/api/email/gmail/webhook': typeof ApiEmailGmailWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -115,7 +155,12 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
+  '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
+  '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
+  '/api/email/gmail/webhook': typeof ApiEmailGmailWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -130,7 +175,12 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/api/auth/$'
+    | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/poll'
+    | '/api/email/gmail/sync'
+    | '/api/email/gmail/watch'
+    | '/api/email/gmail/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -143,7 +193,12 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/api/auth/$'
+    | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/poll'
+    | '/api/email/gmail/sync'
+    | '/api/email/gmail/watch'
+    | '/api/email/gmail/webhook'
   id:
     | '__root__'
     | '/'
@@ -156,7 +211,12 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/settings'
     | '/api/auth/$'
+    | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/poll'
+    | '/api/email/gmail/sync'
+    | '/api/email/gmail/watch'
+    | '/api/email/gmail/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -170,7 +230,12 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiEmailBackfillRoute: typeof ApiEmailBackfillRoute
   ApiEmailInboundRoute: typeof ApiEmailInboundRoute
+  ApiEmailGmailPollRoute: typeof ApiEmailGmailPollRoute
+  ApiEmailGmailSyncRoute: typeof ApiEmailGmailSyncRoute
+  ApiEmailGmailWatchRoute: typeof ApiEmailGmailWatchRoute
+  ApiEmailGmailWebhookRoute: typeof ApiEmailGmailWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -245,11 +310,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiEmailInboundRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/email/backfill': {
+      id: '/api/email/backfill'
+      path: '/api/email/backfill'
+      fullPath: '/api/email/backfill'
+      preLoaderRoute: typeof ApiEmailBackfillRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/email/gmail/webhook': {
+      id: '/api/email/gmail/webhook'
+      path: '/api/email/gmail/webhook'
+      fullPath: '/api/email/gmail/webhook'
+      preLoaderRoute: typeof ApiEmailGmailWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/email/gmail/watch': {
+      id: '/api/email/gmail/watch'
+      path: '/api/email/gmail/watch'
+      fullPath: '/api/email/gmail/watch'
+      preLoaderRoute: typeof ApiEmailGmailWatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/email/gmail/sync': {
+      id: '/api/email/gmail/sync'
+      path: '/api/email/gmail/sync'
+      fullPath: '/api/email/gmail/sync'
+      preLoaderRoute: typeof ApiEmailGmailSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/email/gmail/poll': {
+      id: '/api/email/gmail/poll'
+      path: '/api/email/gmail/poll'
+      fullPath: '/api/email/gmail/poll'
+      preLoaderRoute: typeof ApiEmailGmailPollRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -266,7 +366,12 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiEmailBackfillRoute: ApiEmailBackfillRoute,
   ApiEmailInboundRoute: ApiEmailInboundRoute,
+  ApiEmailGmailPollRoute: ApiEmailGmailPollRoute,
+  ApiEmailGmailSyncRoute: ApiEmailGmailSyncRoute,
+  ApiEmailGmailWatchRoute: ApiEmailGmailWatchRoute,
+  ApiEmailGmailWebhookRoute: ApiEmailGmailWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

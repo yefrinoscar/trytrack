@@ -100,6 +100,7 @@ export interface EmailExpenseImport {
   spentAt?: string
   occurredAt?: string
   source?: string
+  category?: string
   status: EmailExpenseImportStatus
   createdAt: string
   updatedAt: string
@@ -862,6 +863,7 @@ function createId(prefix: string) {
 function toExpenseFromEmailImport(
   item: EmailExpenseImport,
   createdAt = new Date().toISOString(),
+  category = 'Email import',
 ): Expense | null {
   if (typeof item.amount !== 'number' || !item.currency || !item.spentAt) {
     return null
@@ -871,7 +873,7 @@ function toExpenseFromEmailImport(
     id: `expense-email-${item.emailId}`,
     amount: item.amount,
     currency: item.currency,
-    category: 'Email import',
+    category,
     description: item.merchant ?? item.subject ?? 'Email expense',
     merchant: item.merchant,
     spentAt: item.spentAt,
@@ -938,6 +940,7 @@ export function useFinanceDashboard(enabled = true) {
           spentAt: item.spentAt,
           occurredAt: item.occurredAt,
           source: item.source,
+          category: item.category,
           status: item.status,
           createdAt: new Date(item.createdAt).toISOString(),
           updatedAt: new Date(item.updatedAt).toISOString(),
@@ -1185,13 +1188,14 @@ export function useFinanceActions() {
   })
 
   const confirmEmailExpenseImportMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ category, id }: { category?: string; id: string }) => {
       const cached =
         queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY) ?? null
       const item =
         cached?.emailExpenseImports.find((entry) => entry.id === id) ?? null
 
       await convex.mutation(api.expenses.confirmEmailImport, {
+        ...(category ? { category } : {}),
         id: id as Id<'emailExpenseImports'>,
       })
 
@@ -1200,7 +1204,11 @@ export function useFinanceActions() {
       }
 
       return updateDashboardDataFromCache((current) => {
-        const expense = toExpenseFromEmailImport(item)
+        const expense = toExpenseFromEmailImport(
+          item,
+          new Date().toISOString(),
+          category,
+        )
 
         return {
           ...current,
@@ -1215,7 +1223,10 @@ export function useFinanceActions() {
         }
       })
     },
-    onMutate: async (id): Promise<FinanceDashboardMutationContext> => {
+    onMutate: async ({
+      category,
+      id,
+    }): Promise<FinanceDashboardMutationContext> => {
       await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
       const previousDashboard =
         queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY)
@@ -1224,7 +1235,9 @@ export function useFinanceActions() {
         const item = previousDashboard.emailExpenseImports.find(
           (entry) => entry.id === id,
         )
-        const expense = item ? toExpenseFromEmailImport(item) : null
+        const expense = item
+          ? toExpenseFromEmailImport(item, new Date().toISOString(), category)
+          : null
 
         syncCache({
           ...previousDashboard,
