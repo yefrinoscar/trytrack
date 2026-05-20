@@ -896,7 +896,7 @@ export function DailyExpensesColumn({
                       setSelectedEmailImport(null)
                     }}
                   >
-                    Confirm
+                    Count as expense
                   </Button>
                   <Button
                     type="button"
@@ -910,7 +910,7 @@ export function DailyExpensesColumn({
                       setSelectedEmailImport(null)
                     }}
                   >
-                    Ignore
+                    Money movement
                   </Button>
                 </div>
               ) : null}
