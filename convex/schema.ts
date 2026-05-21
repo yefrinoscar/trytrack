@@ -141,6 +141,7 @@ export default defineSchema({
     spentAt: v.optional(v.string()),
     occurredAt: v.optional(v.string()),
     source: v.optional(v.string()),
+    category: v.optional(v.string()),
     dedupeKey: v.optional(v.string()),
     status: v.union(
       v.literal('pending'),

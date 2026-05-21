@@ -747,7 +747,9 @@ export function DailyExpensesColumn({
               className="w-full rounded-lg bg-muted p-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => {
                 setSelectedEmailImport(item)
-                setEmailImportCategory(suggestEmailExpenseCategory(item))
+                setEmailImportCategory(
+                  item.category?.trim() || suggestEmailExpenseCategory(item),
+                )
               }}
             >
               <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
@@ -889,7 +891,16 @@ export function DailyExpensesColumn({
                   id="email-import-category"
                   value={emailImportCategory}
                   onChange={(event) => {
-                    setEmailImportCategory(event.currentTarget.value)
+                    const category = event.currentTarget.value
+                    setEmailImportCategory(category)
+                    setSelectedEmailImport({
+                      ...selectedEmailImport,
+                      category,
+                    })
+                    void actions.updateEmailExpenseImportCategory({
+                      category,
+                      id: selectedEmailImport.id,
+                    })
                   }}
                 >
                   {EMAIL_EXPENSE_CATEGORIES.map((category) => (

@@ -1302,6 +1302,67 @@ export function useFinanceActions() {
     },
   })
 
+  const updateEmailExpenseImportCategoryMutation = useMutation({
+    mutationFn: async ({ category, id }: { category: string; id: string }) => {
+      await convex.mutation(api.expenses.updateEmailImportCategory, {
+        category,
+        id: id as Id<'emailExpenseImports'>,
+      })
+
+      return updateDashboardDataFromCache((current) => ({
+        ...current,
+        emailExpenseImports: current.emailExpenseImports.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                category,
+                updatedAt: new Date().toISOString(),
+              }
+            : item,
+        ),
+      }))
+    },
+    onMutate: async ({
+      category,
+      id,
+    }): Promise<FinanceDashboardMutationContext> => {
+      await queryClient.cancelQueries({ queryKey: DASHBOARD_QUERY_KEY })
+      const previousDashboard =
+        queryClient.getQueryData<DashboardData>(DASHBOARD_QUERY_KEY)
+
+      if (previousDashboard) {
+        syncCache({
+          ...previousDashboard,
+          emailExpenseImports: previousDashboard.emailExpenseImports.map(
+            (item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    category,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : item,
+          ),
+        })
+      }
+
+      return { previousDashboard }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previousDashboard) {
+        syncCache(context.previousDashboard)
+      }
+    },
+    onSuccess: (next) => {
+      if (next) {
+        syncCache(next)
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
+    },
+  })
+
   const updateDebtMutation = useMutation({
     mutationFn: async ({ id, value }: UpdateDebtInput) => {
       await convex.mutation(api.debts.update, {
@@ -1785,6 +1846,8 @@ export function useFinanceActions() {
       removeItem: removeItemMutation.mutateAsync,
       confirmEmailExpenseImport: confirmEmailExpenseImportMutation.mutateAsync,
       dismissEmailExpenseImport: dismissEmailExpenseImportMutation.mutateAsync,
+      updateEmailExpenseImportCategory:
+        updateEmailExpenseImportCategoryMutation.mutateAsync,
       updateDebt: updateDebtMutation.mutateAsync,
       payDebtInstallment: payDebtInstallmentMutation.mutateAsync,
       payCustomAmount: payCustomAmountMutation.mutateAsync,
@@ -1803,6 +1866,7 @@ export function useFinanceActions() {
         removeItemMutation.isPending ||
         confirmEmailExpenseImportMutation.isPending ||
         dismissEmailExpenseImportMutation.isPending ||
+        updateEmailExpenseImportCategoryMutation.isPending ||
         updateDebtMutation.isPending ||
         payDebtInstallmentMutation.isPending ||
         payCustomAmountMutation.isPending ||
@@ -1827,6 +1891,8 @@ export function useFinanceActions() {
       createRecurringPaymentMutation.mutateAsync,
       dismissEmailExpenseImportMutation.isPending,
       dismissEmailExpenseImportMutation.mutateAsync,
+      updateEmailExpenseImportCategoryMutation.isPending,
+      updateEmailExpenseImportCategoryMutation.mutateAsync,
       payCustomAmountMutation.isPending,
       payCustomAmountMutation.mutateAsync,
       payDebtInstallmentMutation.isPending,

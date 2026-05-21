@@ -153,6 +153,7 @@ export const importFromEmail = mutation({
     spentAt: v.optional(v.string()),
     occurredAt: v.optional(v.string()),
     source: v.optional(v.string()),
+    category: v.optional(v.string()),
     dedupeKey: v.optional(v.string()),
     error: v.optional(v.string()),
   },
@@ -241,6 +242,7 @@ export const importFromEmail = mutation({
       spentAt: args.spentAt,
       occurredAt: args.occurredAt,
       source: args.source,
+      category: args.category,
       dedupeKey: args.dedupeKey,
       status: user && hasParsedExpense ? 'pending' : 'needs_review',
       error: user ? args.error : `No TryTrack user found for ${args.userEmail}`,
@@ -318,6 +320,48 @@ export const listPendingEmailImports = query({
         }
       }),
     )
+  },
+})
+
+export const updateEmailImportCategory = mutation({
+  args: {
+    id: v.id('emailExpenseImports'),
+    category: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx)
+    if (!authUser?.email) {
+      throw new ConvexError('Unauthenticated')
+    }
+
+    const row = await ctx.db.get(args.id)
+    if (!row || row.status === 'dismissed') {
+      throw new ConvexError('Email expense not found')
+    }
+
+    const user = row.userId ? await ctx.db.get(row.userId) : null
+    if (!user || user.email !== authUser.email) {
+      throw new ConvexError('Unauthorized')
+    }
+
+    const category = args.category.trim()
+    if (!category) {
+      throw new ConvexError('Category is required')
+    }
+
+    const now = Date.now()
+
+    await ctx.db.patch(row._id, {
+      category,
+      updatedAt: now,
+    })
+
+    if (row.confirmedExpenseId) {
+      await ctx.db.patch(row.confirmedExpenseId, {
+        category,
+        updatedAt: now,
+      })
+    }
   },
 })
 
