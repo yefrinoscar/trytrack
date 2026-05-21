@@ -899,26 +899,6 @@ export function DailyExpensesColumn({
                   ))}
                 </Select>
               </div>
-
-              {selectedEmailImport.status === 'pending' ? (
-                <div className="mt-4 flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={actions.isWorking}
-                    onClick={() => {
-                      void actions.confirmEmailExpenseImport({
-                        category: emailImportCategory,
-                        id: selectedEmailImport.id,
-                      })
-                      setSelectedEmailImport(null)
-                    }}
-                  >
-                    Count as expense
-                  </Button>
-                </div>
-              ) : null}
             </>
           ) : null}
         </DialogContent>
