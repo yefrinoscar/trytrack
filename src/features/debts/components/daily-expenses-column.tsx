@@ -326,6 +326,29 @@ function isMissingCategory(item: EmailExpenseImport) {
   return !item.category?.trim()
 }
 
+function getCurrentMonthInfo() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = today.getMonth()
+
+  return {
+    daysElapsed: today.getDate(),
+    monthKey: `${year}-${String(month + 1).padStart(2, '0')}`,
+  }
+}
+
+function getOptimisticEmailExpenseIds(expenses: Expense[]) {
+  return new Set(
+    expenses
+      .map((expense) =>
+        expense.id.startsWith('expense-email-')
+          ? expense.id.replace('expense-', '')
+          : null,
+      )
+      .filter((id): id is string => Boolean(id)),
+  )
+}
+
 function ExpenseCategoryChart({
   emailExpenseImports,
   expenses,
@@ -373,15 +396,7 @@ function ExpenseCategoryChart({
       addCategory(category, expense.currency, expense.amount)
     }
 
-    const optimisticEmailExpenseIds = new Set(
-      expenses
-        .map((expense) =>
-          expense.id.startsWith('expense-email-')
-            ? expense.id.replace('expense-', '')
-            : null,
-        )
-        .filter((id): id is string => Boolean(id)),
-    )
+    const optimisticEmailExpenseIds = getOptimisticEmailExpenseIds(expenses)
 
     for (const item of emailExpenseImports) {
       if (
@@ -532,6 +547,191 @@ function ExpenseCategoryChart({
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function DailySpendChart({
+  emailExpenseImports,
+  expenses,
+}: {
+  emailExpenseImports: EmailExpenseImport[]
+  expenses: Expense[]
+}) {
+  const { daysElapsed, monthKey } = getCurrentMonthInfo()
+  const { average, currency, maxTotal, peakDay, rows, total } = useMemo(() => {
+    const currencyTotals = new Map<string, number>()
+    const dailyTotals = new Map<string, { count: number; total: number }>()
+
+    function addSpend(spentAt: string, currency: string, amount: number) {
+      if (!spentAt.startsWith(monthKey)) {
+        return
+      }
+
+      currencyTotals.set(currency, (currencyTotals.get(currency) ?? 0) + amount)
+
+      const current = dailyTotals.get(`${currency}:${spentAt}`) ?? {
+        count: 0,
+        total: 0,
+      }
+
+      dailyTotals.set(`${currency}:${spentAt}`, {
+        count: current.count + 1,
+        total: current.total + amount,
+      })
+    }
+
+    for (const expense of expenses) {
+      addSpend(expense.spentAt, expense.currency, expense.amount)
+    }
+
+    const optimisticEmailExpenseIds = getOptimisticEmailExpenseIds(expenses)
+
+    for (const item of emailExpenseImports) {
+      if (
+        typeof item.amount !== 'number' ||
+        !item.currency ||
+        !item.spentAt ||
+        optimisticEmailExpenseIds.has(item.id)
+      ) {
+        continue
+      }
+
+      addSpend(item.spentAt, item.currency, item.amount)
+    }
+
+    const selectedCurrency =
+      [...currencyTotals.entries()].sort(
+        (left, right) => right[1] - left[1],
+      )[0]?.[0] ?? 'PEN'
+    const dailyRows = Array.from({ length: daysElapsed }, (_, index) => {
+      const day = index + 1
+      const dateKey = `${monthKey}-${String(day).padStart(2, '0')}`
+      const date = new Date(`${dateKey}T00:00:00`)
+      const daily = dailyTotals.get(`${selectedCurrency}:${dateKey}`) ?? {
+        count: 0,
+        total: 0,
+      }
+
+      return {
+        count: daily.count,
+        day,
+        key: dateKey,
+        label: new Intl.DateTimeFormat('en-US', {
+          day: 'numeric',
+          month: 'short',
+        }).format(date),
+        total: daily.total,
+        weekday: new Intl.DateTimeFormat('en-US', {
+          weekday: 'short',
+        }).format(date),
+      }
+    })
+    const monthTotal = dailyRows.reduce((sum, row) => sum + row.total, 0)
+    const nonZeroDays = dailyRows.filter((row) => row.total > 0)
+    const topDay =
+      nonZeroDays.slice().sort((left, right) => right.total - left.total)[0] ??
+      null
+
+    return {
+      average: nonZeroDays.length ? monthTotal / nonZeroDays.length : 0,
+      currency: selectedCurrency,
+      maxTotal: Math.max(...dailyRows.map((row) => row.total), 0),
+      peakDay: topDay,
+      rows: dailyRows,
+      total: monthTotal,
+    }
+  }, [emailExpenseImports, expenses, daysElapsed, monthKey])
+
+  if (!total) {
+    return (
+      <div className="mt-3 rounded-lg border border-dashed border-border bg-muted p-3">
+        <p className="text-[0.68rem] font-medium uppercase tracking-[0.12em] text-foreground-faint">
+          Daily chart
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          No daily spending this month.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-3 rounded-lg bg-muted p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[0.68rem] font-medium uppercase tracking-[0.12em] text-foreground-faint">
+            Daily chart
+          </p>
+          <p className="mt-1 truncate text-sm font-semibold text-foreground">
+            Peak {peakDay ? `${peakDay.label}, ${peakDay.weekday}` : '--'}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="font-mono text-base font-semibold text-foreground">
+            {formatCurrency(total, currency)}
+          </p>
+          <p className="text-[0.68rem] text-muted-foreground">This month</p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-card px-2.5 py-2">
+          <p className="text-[0.62rem] uppercase tracking-[0.08em] text-foreground-faint">
+            Active avg
+          </p>
+          <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+            {formatCurrency(average, currency)}
+          </p>
+        </div>
+        <div className="rounded-lg bg-card px-2.5 py-2">
+          <p className="text-[0.62rem] uppercase tracking-[0.08em] text-foreground-faint">
+            Peak day
+          </p>
+          <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+            {peakDay ? formatCurrency(peakDay.total, currency) : '--'}
+          </p>
+        </div>
+      </div>
+
+      <div
+        className="mt-3 grid h-24 items-end gap-1"
+        style={{
+          gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))`,
+        }}
+      >
+        {rows.map((row) => {
+          const isToday = row.day === daysElapsed
+          const height = row.total
+            ? `${Math.max((row.total / maxTotal) * 100, 7)}%`
+            : '4%'
+
+          return (
+            <div
+              key={row.key}
+              className="flex h-full min-w-0 items-end"
+              title={`${row.label}: ${formatCurrency(row.total, currency)} (${row.count})`}
+            >
+              <div
+                className={`w-full rounded-t-sm ${
+                  row.total
+                    ? isToday
+                      ? 'bg-amber-300'
+                      : 'bg-sky-400'
+                    : 'bg-card'
+                }`}
+                style={{ height }}
+              />
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-2 flex items-center justify-between font-mono text-[0.62rem] text-muted-foreground">
+        <span>1</span>
+        <span>{Math.max(1, Math.ceil(daysElapsed / 2))}</span>
+        <span>{daysElapsed}</span>
       </div>
     </div>
   )
@@ -695,6 +895,10 @@ export function DailyExpensesColumn({
       </div>
 
       <ExpenseCategoryChart
+        emailExpenseImports={emailExpenseImports}
+        expenses={expenses}
+      />
+      <DailySpendChart
         emailExpenseImports={emailExpenseImports}
         expenses={expenses}
       />
