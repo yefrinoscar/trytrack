@@ -326,7 +326,13 @@ function isMissingCategory(item: EmailExpenseImport) {
   return !item.category?.trim()
 }
 
-function ExpenseCategoryChart({ expenses }: { expenses: Expense[] }) {
+function ExpenseCategoryChart({
+  emailExpenseImports,
+  expenses,
+}: {
+  emailExpenseImports: EmailExpenseImport[]
+  expenses: Expense[]
+}) {
   const monthKey = todayKey().slice(0, 7)
   const { currency, rows, total } = useMemo(() => {
     const categories = new Map<
@@ -367,6 +373,33 @@ function ExpenseCategoryChart({ expenses }: { expenses: Expense[] }) {
       addCategory(category, expense.currency, expense.amount)
     }
 
+    const optimisticEmailExpenseIds = new Set(
+      expenses
+        .map((expense) =>
+          expense.id.startsWith('expense-email-')
+            ? expense.id.replace('expense-', '')
+            : null,
+        )
+        .filter((id): id is string => Boolean(id)),
+    )
+
+    for (const item of emailExpenseImports) {
+      if (
+        typeof item.amount !== 'number' ||
+        !item.currency ||
+        !item.spentAt?.startsWith(monthKey) ||
+        optimisticEmailExpenseIds.has(item.id)
+      ) {
+        continue
+      }
+
+      addCategory(
+        isMissingCategory(item) ? 'Needs category' : item.category!.trim(),
+        item.currency,
+        item.amount,
+      )
+    }
+
     const selectedCurrency =
       [...currencyTotals.entries()].sort(
         (left, right) => right[1] - left[1],
@@ -392,7 +425,7 @@ function ExpenseCategoryChart({ expenses }: { expenses: Expense[] }) {
       rows: visibleRows,
       total: rankedRows.reduce((sum, row) => sum + row.total, 0),
     }
-  }, [expenses, monthKey])
+  }, [emailExpenseImports, expenses, monthKey])
   const topCategory = rows[0] ?? null
 
   if (!rows.length) {
@@ -661,7 +694,10 @@ export function DailyExpensesColumn({
         ) : null}
       </div>
 
-      <ExpenseCategoryChart expenses={expenses} />
+      <ExpenseCategoryChart
+        emailExpenseImports={emailExpenseImports}
+        expenses={expenses}
+      />
 
       {emailExpenseImports.length ? (
         <div className="mt-3 space-y-2">
@@ -875,7 +911,7 @@ export function DailyExpensesColumn({
                       setSelectedEmailImport(null)
                     }}
                   >
-                    Money movement
+                    Don't count
                   </Button>
                 </div>
               ) : null}
