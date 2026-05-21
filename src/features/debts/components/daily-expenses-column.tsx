@@ -560,97 +560,92 @@ function DailySpendChart({
   expenses: Expense[]
 }) {
   const { daysElapsed, monthKey } = getCurrentMonthInfo()
-  const { activeRows, average, currency, maxTotal, peakDay, rows, total } =
-    useMemo(() => {
-      const currencyTotals = new Map<string, number>()
-      const dailyTotals = new Map<string, { count: number; total: number }>()
+  const [hoveredDayKey, setHoveredDayKey] = useState<string | null>(null)
+  const { average, currency, maxTotal, peakDay, rows, total } = useMemo(() => {
+    const currencyTotals = new Map<string, number>()
+    const dailyTotals = new Map<string, { count: number; total: number }>()
 
-      function addSpend(spentAt: string, currency: string, amount: number) {
-        if (!spentAt.startsWith(monthKey)) {
-          return
-        }
-
-        currencyTotals.set(
-          currency,
-          (currencyTotals.get(currency) ?? 0) + amount,
-        )
-
-        const current = dailyTotals.get(`${currency}:${spentAt}`) ?? {
-          count: 0,
-          total: 0,
-        }
-
-        dailyTotals.set(`${currency}:${spentAt}`, {
-          count: current.count + 1,
-          total: current.total + amount,
-        })
+    function addSpend(spentAt: string, currency: string, amount: number) {
+      if (!spentAt.startsWith(monthKey)) {
+        return
       }
 
-      for (const expense of expenses) {
-        addSpend(expense.spentAt, expense.currency, expense.amount)
+      currencyTotals.set(currency, (currencyTotals.get(currency) ?? 0) + amount)
+
+      const current = dailyTotals.get(`${currency}:${spentAt}`) ?? {
+        count: 0,
+        total: 0,
       }
 
-      const optimisticEmailExpenseIds = getOptimisticEmailExpenseIds(expenses)
-
-      for (const item of emailExpenseImports) {
-        if (
-          typeof item.amount !== 'number' ||
-          !item.currency ||
-          !item.spentAt ||
-          optimisticEmailExpenseIds.has(item.id)
-        ) {
-          continue
-        }
-
-        addSpend(item.spentAt, item.currency, item.amount)
-      }
-
-      const selectedCurrency =
-        [...currencyTotals.entries()].sort(
-          (left, right) => right[1] - left[1],
-        )[0]?.[0] ?? 'PEN'
-      const dailyRows = Array.from({ length: daysElapsed }, (_, index) => {
-        const day = index + 1
-        const dateKey = `${monthKey}-${String(day).padStart(2, '0')}`
-        const date = new Date(`${dateKey}T00:00:00`)
-        const daily = dailyTotals.get(`${selectedCurrency}:${dateKey}`) ?? {
-          count: 0,
-          total: 0,
-        }
-
-        return {
-          count: daily.count,
-          day,
-          key: dateKey,
-          label: new Intl.DateTimeFormat('en-US', {
-            day: 'numeric',
-            month: 'short',
-          }).format(date),
-          total: daily.total,
-          weekday: new Intl.DateTimeFormat('en-US', {
-            weekday: 'short',
-          }).format(date),
-        }
+      dailyTotals.set(`${currency}:${spentAt}`, {
+        count: current.count + 1,
+        total: current.total + amount,
       })
-      const monthTotal = dailyRows.reduce((sum, row) => sum + row.total, 0)
-      const nonZeroDays = dailyRows.filter((row) => row.total > 0)
-      const topDay =
-        nonZeroDays
-          .slice()
-          .sort((left, right) => right.total - left.total)[0] ?? null
+    }
+
+    for (const expense of expenses) {
+      addSpend(expense.spentAt, expense.currency, expense.amount)
+    }
+
+    const optimisticEmailExpenseIds = getOptimisticEmailExpenseIds(expenses)
+
+    for (const item of emailExpenseImports) {
+      if (
+        typeof item.amount !== 'number' ||
+        !item.currency ||
+        !item.spentAt ||
+        optimisticEmailExpenseIds.has(item.id)
+      ) {
+        continue
+      }
+
+      addSpend(item.spentAt, item.currency, item.amount)
+    }
+
+    const selectedCurrency =
+      [...currencyTotals.entries()].sort(
+        (left, right) => right[1] - left[1],
+      )[0]?.[0] ?? 'PEN'
+    const dailyRows = Array.from({ length: daysElapsed }, (_, index) => {
+      const day = index + 1
+      const dateKey = `${monthKey}-${String(day).padStart(2, '0')}`
+      const date = new Date(`${dateKey}T00:00:00`)
+      const daily = dailyTotals.get(`${selectedCurrency}:${dateKey}`) ?? {
+        count: 0,
+        total: 0,
+      }
 
       return {
-        activeRows: nonZeroDays
-          .slice()
-          .sort((left, right) => right.day - left.day),
-        average: nonZeroDays.length ? monthTotal / nonZeroDays.length : 0,
-        currency: selectedCurrency,
-        maxTotal: Math.max(...dailyRows.map((row) => row.total), 0),
-        peakDay: topDay,
-        rows: dailyRows,
-        total: monthTotal,
+        count: daily.count,
+        day,
+        key: dateKey,
+        label: new Intl.DateTimeFormat('en-US', {
+          day: 'numeric',
+          month: 'short',
+        }).format(date),
+        total: daily.total,
+        weekday: new Intl.DateTimeFormat('en-US', {
+          weekday: 'short',
+        }).format(date),
       }
-    }, [emailExpenseImports, expenses, daysElapsed, monthKey])
+    })
+    const monthTotal = dailyRows.reduce((sum, row) => sum + row.total, 0)
+    const nonZeroDays = dailyRows.filter((row) => row.total > 0)
+    const topDay =
+      nonZeroDays.slice().sort((left, right) => right.total - left.total)[0] ??
+      null
+
+    return {
+      average: nonZeroDays.length ? monthTotal / nonZeroDays.length : 0,
+      currency: selectedCurrency,
+      maxTotal: Math.max(...dailyRows.map((row) => row.total), 0),
+      peakDay: topDay,
+      rows: dailyRows,
+      total: monthTotal,
+    }
+  }, [emailExpenseImports, expenses, daysElapsed, monthKey])
+  const selectedDay =
+    rows.find((row) => row.key === hoveredDayKey) ?? peakDay ?? null
 
   if (!total) {
     return (
@@ -673,14 +668,27 @@ function DailySpendChart({
             Daily chart
           </p>
           <p className="mt-1 truncate text-sm font-semibold text-foreground">
-            Peak {peakDay ? `${peakDay.label}, ${peakDay.weekday}` : '--'}
+            {selectedDay
+              ? `${selectedDay.label}, ${selectedDay.weekday}`
+              : 'No day selected'}
+          </p>
+          <p className="mt-0.5 text-[0.68rem] text-muted-foreground">
+            {selectedDay
+              ? `${selectedDay.count} ${
+                  selectedDay.count === 1 ? 'movement' : 'movements'
+                }`
+              : 'Hover a bar'}
           </p>
         </div>
         <div className="shrink-0 text-right">
           <p className="font-mono text-base font-semibold text-foreground">
-            {formatCurrency(total, currency)}
+            {selectedDay
+              ? formatCurrency(selectedDay.total, currency)
+              : formatCurrency(total, currency)}
           </p>
-          <p className="text-[0.68rem] text-muted-foreground">This month</p>
+          <p className="text-[0.68rem] text-muted-foreground">
+            {selectedDay ? 'Selected day' : 'This month'}
+          </p>
         </div>
       </div>
 
@@ -705,6 +713,9 @@ function DailySpendChart({
 
       <div
         className="mt-3 grid h-24 items-end gap-1"
+        onMouseLeave={() => {
+          setHoveredDayKey(null)
+        }}
         style={{
           gridTemplateColumns: `repeat(${rows.length}, minmax(0, 1fr))`,
         }}
@@ -716,22 +727,34 @@ function DailySpendChart({
             : '4%'
 
           return (
-            <div
+            <button
               key={row.key}
-              className="flex h-full min-w-0 items-end"
+              type="button"
+              className="flex h-full min-w-0 items-end rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title={`${row.label}: ${formatCurrency(row.total, currency)} (${row.count})`}
+              onBlur={() => {
+                setHoveredDayKey(null)
+              }}
+              onFocus={() => {
+                setHoveredDayKey(row.key)
+              }}
+              onMouseEnter={() => {
+                setHoveredDayKey(row.key)
+              }}
             >
               <div
                 className={`w-full rounded-t-sm ${
-                  row.total
-                    ? isToday
-                      ? 'bg-amber-300'
-                      : 'bg-sky-400'
-                    : 'bg-card'
+                  selectedDay?.key === row.key
+                    ? 'bg-emerald-300'
+                    : row.total
+                      ? isToday
+                        ? 'bg-amber-300'
+                        : 'bg-sky-400'
+                      : 'bg-card'
                 }`}
                 style={{ height }}
               />
-            </div>
+            </button>
           )
         })}
       </div>
@@ -740,43 +763,6 @@ function DailySpendChart({
         <span>1</span>
         <span>{Math.max(1, Math.ceil(daysElapsed / 2))}</span>
         <span>{daysElapsed}</span>
-      </div>
-
-      <div className="mt-3 space-y-2">
-        {activeRows.map((row) => {
-          const percentage = maxTotal ? (row.total / maxTotal) * 100 : 0
-
-          return (
-            <div key={row.key} className="grid gap-1">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium text-foreground">
-                    {row.label}
-                    <span className="ml-1 text-muted-foreground">
-                      {row.weekday}
-                    </span>
-                  </p>
-                  <p className="text-[0.62rem] text-muted-foreground">
-                    {row.count} {row.count === 1 ? 'movement' : 'movements'}
-                  </p>
-                </div>
-                <p className="shrink-0 font-mono text-xs font-semibold text-foreground">
-                  {formatCurrency(row.total, currency)}
-                </p>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-card">
-                <div
-                  className={
-                    row.day === daysElapsed
-                      ? 'h-full bg-amber-300'
-                      : 'h-full bg-sky-400'
-                  }
-                  style={{ width: `${Math.max(percentage, 4)}%` }}
-                />
-              </div>
-            </div>
-          )
-        })}
       </div>
     </div>
   )
