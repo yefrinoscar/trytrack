@@ -59,6 +59,13 @@ interface PubSubPushBody {
 const DEFAULT_BANK_QUERY =
   '(from:notificaciones@yape.pe OR from:procesos@bbva.com.pe OR from:yape@bcp.com.pe OR from:notificaciones@notificacionesbcp.com.pe OR yape OR bbva OR plin)'
 
+let gmailAccessTokenCache:
+  | {
+      accessToken: string
+      expiresAt: number
+    }
+  | undefined
+
 class GmailApiError extends Error {
   status: number
 
@@ -229,6 +236,13 @@ function createEmailExpenseDedupeKey({
 }
 
 async function getGmailAccessToken(request?: Request) {
+  if (
+    gmailAccessTokenCache &&
+    gmailAccessTokenCache.expiresAt > Date.now() + 60_000
+  ) {
+    return gmailAccessTokenCache.accessToken
+  }
+
   const response = await fetch('https://oauth2.googleapis.com/token', {
     body: new URLSearchParams({
       client_id: getRequiredEnv('GMAIL_CLIENT_ID', request),
@@ -247,10 +261,18 @@ async function getGmailAccessToken(request?: Request) {
     )
   }
 
-  const body = (await response.json()) as { access_token?: string }
+  const body = (await response.json()) as {
+    access_token?: string
+    expires_in?: number
+  }
 
   if (!body.access_token) {
     throw new Error('Gmail token refresh did not return an access token.')
+  }
+
+  gmailAccessTokenCache = {
+    accessToken: body.access_token,
+    expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
   }
 
   return body.access_token
