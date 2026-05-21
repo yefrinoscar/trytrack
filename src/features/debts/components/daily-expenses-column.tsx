@@ -741,45 +741,63 @@ export function DailyExpensesColumn({
           </div>
 
           {visibleEmailExpenseImports.map((item) => (
-            <button
+            <div
               key={item.id}
-              type="button"
-              className="w-full rounded-lg bg-muted p-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => {
-                setSelectedEmailImport(item)
-                setEmailImportCategory(suggestEmailExpenseCategory(item))
-              }}
+              className="rounded-lg bg-muted p-2.5 transition-colors hover:bg-accent"
             >
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
-                <div className="min-w-0 self-start">
-                  <div className="flex min-w-0 items-center gap-2">
-                    {isMissingCategory(item) ? (
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full bg-emerald-400"
-                        title="Needs category"
-                      />
-                    ) : null}
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      {item.merchant ?? item.subject ?? 'Email expense'}
-                    </p>
+              <button
+                type="button"
+                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => {
+                  setSelectedEmailImport(item)
+                  setEmailImportCategory(suggestEmailExpenseCategory(item))
+                }}
+              >
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
+                  <div className="min-w-0 self-start">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {isMissingCategory(item) ? (
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full bg-emerald-400"
+                          title="Needs category"
+                        />
+                      ) : null}
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {item.merchant ?? item.subject ?? 'Email expense'}
+                      </p>
+                    </div>
                   </div>
+                  <p className="min-w-[4.75rem] whitespace-nowrap text-right font-mono text-sm font-semibold text-foreground">
+                    {typeof item.amount === 'number'
+                      ? formatCurrency(
+                          item.amount,
+                          item.currency ?? defaultCurrency,
+                        )
+                      : '--'}
+                  </p>
+                  <div className="min-w-0 self-end">
+                    <EmailSourceTag source={item.source} />
+                  </div>
+                  <p className="self-end whitespace-nowrap text-right text-xs text-muted-foreground">
+                    {formatEmailImportDate(item.spentAt)}
+                  </p>
                 </div>
-                <p className="min-w-[4.75rem] whitespace-nowrap text-right font-mono text-sm font-semibold text-foreground">
-                  {typeof item.amount === 'number'
-                    ? formatCurrency(
-                        item.amount,
-                        item.currency ?? defaultCurrency,
-                      )
-                    : '--'}
-                </p>
-                <div className="min-w-0 self-end">
-                  <EmailSourceTag source={item.source} />
-                </div>
-                <p className="self-end whitespace-nowrap text-right text-xs text-muted-foreground">
-                  {formatEmailImportDate(item.spentAt)}
-                </p>
-              </div>
-            </button>
+              </button>
+              <label className="mt-2 flex items-center justify-end gap-2 border-t border-border/60 pt-2 text-xs font-medium text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  disabled={actions.isWorking}
+                  className="h-4 w-4 accent-foreground"
+                  onChange={(event) => {
+                    if (event.currentTarget.checked) {
+                      void actions.dismissEmailExpenseImport(item.id)
+                    }
+                  }}
+                />
+                <span>Don't count</span>
+              </label>
+            </div>
           ))}
         </div>
       ) : null}
@@ -861,6 +879,24 @@ export function DailyExpensesColumn({
               </dl>
 
               <div className="mt-4 space-y-2">
+                <label className="flex items-center justify-between gap-3 rounded-lg bg-muted p-2.5 text-sm font-medium text-foreground">
+                  <span>Don't count</span>
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    disabled={actions.isWorking}
+                    className="h-4 w-4 accent-foreground"
+                    onChange={(event) => {
+                      if (event.currentTarget.checked) {
+                        void actions.dismissEmailExpenseImport(
+                          selectedEmailImport.id,
+                        )
+                        setSelectedEmailImport(null)
+                      }
+                    }}
+                  />
+                </label>
+
                 <label
                   className="text-[0.68rem] font-medium uppercase tracking-[0.08em] text-muted-foreground"
                   htmlFor="email-import-category"
@@ -898,20 +934,6 @@ export function DailyExpensesColumn({
                     }}
                   >
                     Count as expense
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={actions.isWorking}
-                    onClick={() => {
-                      void actions.dismissEmailExpenseImport(
-                        selectedEmailImport.id,
-                      )
-                      setSelectedEmailImport(null)
-                    }}
-                  >
-                    Don't count
                   </Button>
                 </div>
               ) : null}
