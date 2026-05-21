@@ -741,63 +741,45 @@ export function DailyExpensesColumn({
           </div>
 
           {visibleEmailExpenseImports.map((item) => (
-            <div
+            <button
               key={item.id}
-              className="rounded-lg bg-muted p-2.5 transition-colors hover:bg-accent"
+              type="button"
+              className="w-full rounded-lg bg-muted p-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => {
+                setSelectedEmailImport(item)
+                setEmailImportCategory(suggestEmailExpenseCategory(item))
+              }}
             >
-              <button
-                type="button"
-                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                onClick={() => {
-                  setSelectedEmailImport(item)
-                  setEmailImportCategory(suggestEmailExpenseCategory(item))
-                }}
-              >
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
-                  <div className="min-w-0 self-start">
-                    <div className="flex min-w-0 items-center gap-2">
-                      {isMissingCategory(item) ? (
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full bg-emerald-400"
-                          title="Needs category"
-                        />
-                      ) : null}
-                      <p className="truncate text-sm font-semibold text-foreground">
-                        {item.merchant ?? item.subject ?? 'Email expense'}
-                      </p>
-                    </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
+                <div className="min-w-0 self-start">
+                  <div className="flex min-w-0 items-center gap-2">
+                    {isMissingCategory(item) ? (
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full bg-emerald-400"
+                        title="Needs category"
+                      />
+                    ) : null}
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {item.merchant ?? item.subject ?? 'Email expense'}
+                    </p>
                   </div>
-                  <p className="min-w-[4.75rem] whitespace-nowrap text-right font-mono text-sm font-semibold text-foreground">
-                    {typeof item.amount === 'number'
-                      ? formatCurrency(
-                          item.amount,
-                          item.currency ?? defaultCurrency,
-                        )
-                      : '--'}
-                  </p>
-                  <div className="min-w-0 self-end">
-                    <EmailSourceTag source={item.source} />
-                  </div>
-                  <p className="self-end whitespace-nowrap text-right text-xs text-muted-foreground">
-                    {formatEmailImportDate(item.spentAt)}
-                  </p>
                 </div>
-              </button>
-              <label className="mt-2 flex items-center justify-end gap-2 border-t border-border/60 pt-2 text-xs font-medium text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={false}
-                  disabled={actions.isWorking}
-                  className="h-4 w-4 accent-foreground"
-                  onChange={(event) => {
-                    if (event.currentTarget.checked) {
-                      void actions.dismissEmailExpenseImport(item.id)
-                    }
-                  }}
-                />
-                <span>Don't count</span>
-              </label>
-            </div>
+                <p className="min-w-[4.75rem] whitespace-nowrap text-right font-mono text-sm font-semibold text-foreground">
+                  {typeof item.amount === 'number'
+                    ? formatCurrency(
+                        item.amount,
+                        item.currency ?? defaultCurrency,
+                      )
+                    : '--'}
+                </p>
+                <div className="min-w-0 self-end">
+                  <EmailSourceTag source={item.source} />
+                </div>
+                <p className="self-end whitespace-nowrap text-right text-xs text-muted-foreground">
+                  {formatEmailImportDate(item.spentAt)}
+                </p>
+              </div>
+            </button>
           ))}
         </div>
       ) : null}
