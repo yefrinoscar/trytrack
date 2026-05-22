@@ -42,10 +42,6 @@ function timeValue(value: string | undefined) {
   return Number.isFinite(timestamp) ? timestamp : 0
 }
 
-function compareExpensesByMostRecent(left: Expense, right: Expense) {
-  return timeValue(right.createdAt) - timeValue(left.createdAt)
-}
-
 function compareEmailImportsByMostRecent(
   left: EmailExpenseImport,
   right: EmailExpenseImport,
@@ -809,14 +805,35 @@ export function DailyExpensesColumn({
   const [selectedEmailImport, setSelectedEmailImport] =
     useState<EmailExpenseImport | null>(null)
   const today = todayKey()
-  const todayExpenses = useMemo(
-    () =>
-      expenses
-        .filter((expense) => expense.spentAt === today)
-        .slice()
-        .sort(compareExpensesByMostRecent),
-    [expenses, today],
-  )
+  const todayEntries = useMemo(() => {
+    const optimisticEmailExpenseIds = getOptimisticEmailExpenseIds(expenses)
+    const expenseEntries = expenses
+      .filter((expense) => expense.spentAt === today)
+      .map((expense) => ({
+        createdAt: expense.createdAt,
+        expense,
+        id: expense.id,
+        kind: 'expense' as const,
+      }))
+    const emailEntries = emailExpenseImports
+      .filter(
+        (item) =>
+          item.spentAt === today &&
+          typeof item.amount === 'number' &&
+          Boolean(item.currency) &&
+          !optimisticEmailExpenseIds.has(item.id),
+      )
+      .map((item) => ({
+        createdAt: item.occurredAt ?? item.createdAt,
+        id: item.id,
+        item,
+        kind: 'email' as const,
+      }))
+
+    return [...expenseEntries, ...emailEntries].sort(
+      (left, right) => timeValue(right.createdAt) - timeValue(left.createdAt),
+    )
+  }, [emailExpenseImports, expenses, today])
   const sortedEmailExpenseImports = useMemo(
     () => emailExpenseImports.slice().sort(compareEmailImportsByMostRecent),
     [emailExpenseImports],
@@ -1151,41 +1168,78 @@ export function DailyExpensesColumn({
       </Dialog>
 
       <div className="mt-3 space-y-2">
-        {todayExpenses.length ? (
-          todayExpenses.map((expense) => (
-            <div
-              key={expense.id}
-              className="flex items-center justify-between gap-3 rounded-lg bg-muted p-2.5"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {expense.description}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {expense.category}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-foreground">
-                  {formatCurrency(expense.amount, expense.currency)}
-                </span>
-                <Button
+        {todayEntries.length ? (
+          todayEntries.map((entry) => {
+            if (entry.kind === 'email') {
+              const item = entry.item
+              const category =
+                item.category?.trim() || suggestEmailExpenseCategory(item)
+
+              return (
+                <button
+                  key={`today-email-${item.id}`}
                   type="button"
-                  size="icon-xs"
-                  variant="ghost"
+                  className="flex w-full items-center justify-between gap-3 rounded-lg bg-muted p-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => {
-                    void actions.removeItem({
-                      kind: 'expenses',
-                      id: expense.id,
-                    })
+                    setSelectedEmailImport(item)
+                    setEmailImportCategory(category)
                   }}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <EmailSourceTag source={item.source} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {item.merchant ?? item.subject ?? 'Email expense'}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {category}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-sm text-foreground">
+                    {formatCurrency(item.amount!, item.currency!)}
+                  </span>
+                </button>
+              )
+            }
+
+            const { expense } = entry
+
+            return (
+              <div
+                key={expense.id}
+                className="flex items-center justify-between gap-3 rounded-lg bg-muted p-2.5"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {expense.description}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {expense.category}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm text-foreground">
+                    {formatCurrency(expense.amount, expense.currency)}
+                  </span>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    onClick={() => {
+                      void actions.removeItem({
+                        kind: 'expenses',
+                        id: expense.id,
+                      })
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))
-        ) : emailExpenseImports.length ? null : (
+            )
+          })
+        ) : (
           <p className="rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
             No expenses logged today.
           </p>
