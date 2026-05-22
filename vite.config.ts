@@ -66,12 +66,14 @@ export default defineConfig({
                 preset: 'node',
                 errorHandler: nitroErrorHandler,
                 logging: { compressed: false },
+                plugins: ['./src/lib/gmail-scheduled-sync.ts'],
                 rollupConfig: { external: [/^@sentry\//] },
               }
             : {
                 preset: 'cloudflare_module',
                 errorHandler: nitroErrorHandler,
                 logging: { compressed: false },
+                plugins: ['./src/lib/gmail-scheduled-sync.ts'],
                 cloudflare: {
                   deployConfig: true,
                   nodeCompat: true,
@@ -80,6 +82,9 @@ export default defineConfig({
                     keep_vars: true,
                     name: 'trytrack',
                     no_bundle: false,
+                    triggers: {
+                      crons: ['*/15 * * * *', '0 */12 * * *'],
+                    },
                     observability: {
                       logs: {
                         enabled: true,
