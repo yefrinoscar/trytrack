@@ -648,125 +648,170 @@ function decodePubSubData(value: string | undefined) {
 
   return JSON.parse(decodeBase64Url(value)) as {
     emailAddress?: string
-    historyId?: string
+    historyId?: number | string
   }
 }
 
+function compareHistoryIds(left: string, right: string) {
+  const leftValue = BigInt(left)
+  const rightValue = BigInt(right)
+
+  if (leftValue === rightValue) {
+    return 0
+  }
+
+  return leftValue > rightValue ? 1 : -1
+}
+
 export async function handleGmailPubSubWebhook(request: Request) {
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204 })
-  }
+  try {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204 })
+    }
 
-  if (request.method !== 'POST') {
-    return jsonResponse(
-      { error: 'Method not allowed. Use POST.' },
-      { status: 405, headers: { allow: 'POST, OPTIONS' } },
-    )
-  }
+    if (request.method !== 'POST') {
+      return jsonResponse(
+        { error: 'Method not allowed. Use POST.' },
+        { status: 405, headers: { allow: 'POST, OPTIONS' } },
+      )
+    }
 
-  const webhookSecret = getRuntimeEnv('GMAIL_PUBSUB_WEBHOOK_SECRET', request)
-  if (
-    webhookSecret &&
-    new URL(request.url).searchParams.get('token') !== webhookSecret
-  ) {
-    return jsonResponse({ error: 'Unauthorized.' }, { status: 401 })
-  }
+    const webhookSecret = getRuntimeEnv('GMAIL_PUBSUB_WEBHOOK_SECRET', request)
+    if (
+      webhookSecret &&
+      new URL(request.url).searchParams.get('token') !== webhookSecret
+    ) {
+      return jsonResponse({ error: 'Unauthorized.' }, { status: 401 })
+    }
 
-  const body = (await request.json().catch(() => null)) as PubSubPushBody | null
-  const notification = decodePubSubData(body?.message?.data)
-  const ownerEmail = getOwnerEmail(request, notification?.emailAddress)
+    const body = (await request
+      .json()
+      .catch(() => null)) as PubSubPushBody | null
+    const notification = decodePubSubData(body?.message?.data)
+    const ownerEmail = getOwnerEmail(request, notification?.emailAddress)
+    const notificationHistoryId =
+      notification?.historyId === undefined || notification.historyId === null
+        ? undefined
+        : String(notification.historyId)
 
-  if (!ownerEmail || !notification?.historyId) {
-    return jsonResponse(
-      { error: 'Invalid Gmail Pub/Sub notification.' },
-      { status: 400 },
-    )
-  }
+    if (!ownerEmail || !notificationHistoryId) {
+      return jsonResponse(
+        { error: 'Invalid Gmail Pub/Sub notification.' },
+        { status: 400 },
+      )
+    }
 
-  const client = getConvexClient(request)
-  const state = await client.query(api.gmailSync.getState, {
-    userEmail: ownerEmail,
-  })
-
-  if (!state?.historyId) {
-    const fallback = await syncGmailQuery({
-      client,
-      maxMessages: getPollMaxMessages(request),
-      ownerEmail,
-      query: getRecentBankQuery(request),
-      request,
+    const client = getConvexClient(request)
+    const state = await client.query(api.gmailSync.getState, {
+      userEmail: ownerEmail,
     })
 
+    if (!state?.historyId) {
+      const fallback = await syncGmailQuery({
+        client,
+        maxMessages: getPollMaxMessages(request),
+        ownerEmail,
+        query: getRecentBankQuery(request),
+        request,
+      })
+
+      await client.mutation(api.gmailSync.upsertState, {
+        historyId: notificationHistoryId,
+        userEmail: ownerEmail,
+      })
+
+      return jsonResponse({
+        ok: true,
+        initialized: true,
+        fallback,
+        historyId: notificationHistoryId,
+      })
+    }
+
+    if (compareHistoryIds(notificationHistoryId, state.historyId) <= 0) {
+      return jsonResponse({
+        ok: true,
+        currentHistoryId: state.historyId,
+        historyId: notificationHistoryId,
+        stale: true,
+      })
+    }
+
+    let messageIds: string[]
+    let fallback:
+      | {
+          matched: number
+          saved: number
+          skipped: number
+        }
+      | undefined
+
+    try {
+      messageIds = await listHistoryMessageIds({
+        request,
+        startHistoryId: state.historyId,
+      })
+    } catch (error) {
+      if (!(error instanceof GmailApiError) || error.status !== 404) {
+        throw error
+      }
+
+      messageIds = []
+      fallback = await syncGmailQuery({
+        client,
+        maxMessages: getPollMaxMessages(request),
+        ownerEmail,
+        query: getRecentBankQuery(request),
+        request,
+      })
+    }
+    let saved = 0
+    let skipped = 0
+
+    for (const messageId of messageIds) {
+      try {
+        const result = await saveGmailMessageExpense({
+          client,
+          message: await getGmailMessage(messageId, request),
+          ownerEmail,
+        })
+
+        if (result.saved) {
+          saved += 1
+        } else {
+          skipped += 1
+        }
+      } catch (error) {
+        if (!(error instanceof GmailApiError) || error.status !== 404) {
+          throw error
+        }
+
+        // Gmail history can reference messages that were deleted before fetch.
+        skipped += 1
+      }
+    }
+
     await client.mutation(api.gmailSync.upsertState, {
-      historyId: notification.historyId,
+      historyId: notificationHistoryId,
       userEmail: ownerEmail,
     })
 
     return jsonResponse({
       ok: true,
-      initialized: true,
-      fallback,
-      historyId: notification.historyId,
-    })
-  }
-
-  let messageIds: string[]
-  let fallback:
-    | {
-        matched: number
-        saved: number
-        skipped: number
-      }
-    | undefined
-
-  try {
-    messageIds = await listHistoryMessageIds({
-      request,
-      startHistoryId: state.historyId,
+      historyId: notificationHistoryId,
+      matched: messageIds.length,
+      previousHistoryId: state.historyId,
+      saved,
+      skipped,
+      ...(fallback ? { fallback } : {}),
     })
   } catch (error) {
-    if (!(error instanceof GmailApiError) || error.status !== 404) {
-      throw error
-    }
-
-    messageIds = []
-    fallback = await syncGmailQuery({
-      client,
-      maxMessages: getPollMaxMessages(request),
-      ownerEmail,
-      query: getRecentBankQuery(request),
-      request,
-    })
-  }
-  let saved = 0
-  let skipped = 0
-
-  for (const messageId of messageIds) {
-    const result = await saveGmailMessageExpense({
-      client,
-      message: await getGmailMessage(messageId, request),
-      ownerEmail,
+    console.error('Gmail Pub/Sub webhook failed', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      name: error instanceof Error ? error.name : undefined,
+      status: error instanceof GmailApiError ? error.status : undefined,
     })
 
-    if (result.saved) {
-      saved += 1
-    } else {
-      skipped += 1
-    }
+    return errorJsonResponse(error)
   }
-
-  await client.mutation(api.gmailSync.upsertState, {
-    historyId: notification.historyId,
-    userEmail: ownerEmail,
-  })
-
-  return jsonResponse({
-    ok: true,
-    historyId: notification.historyId,
-    previousHistoryId: state.historyId,
-    matched: messageIds.length,
-    saved,
-    skipped,
-    ...(fallback ? { fallback } : {}),
-  })
 }
