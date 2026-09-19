@@ -2,9 +2,8 @@ import * as expenses from './api/expenses'
 import * as gmailSync from './api/gmailSync'
 
 /**
- * Server-side equivalent of the old Convex client. Gmail/Resend webhooks used
- * `ConvexHttpClient` to reach the backend; now they call the local functions
- * directly.
+ * Server-side data access for webhooks and scheduled jobs. Gmail/Resend
+ * handlers call the D1 data functions directly instead of going over HTTP.
  */
 export const serverApi = {
   expenses: {

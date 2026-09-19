@@ -68,6 +68,5 @@ The D1 binding is declared once in `vite.config.ts` under
 
 ## History
 
-This project previously used Convex for the database, functions and auth. It was
-migrated to D1 + Drizzle + Better Auth standalone; `scripts/migrate-convex-export.mjs`
-imports an old `npx convex export` snapshot into D1 if needed.
+This project previously used Convex for the database, functions and auth. It now
+runs on Cloudflare D1 + Drizzle + Better Auth, starting from an empty database.

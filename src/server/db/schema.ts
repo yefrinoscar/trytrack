@@ -9,9 +9,8 @@ import {
 } from 'drizzle-orm/sqlite-core'
 
 /**
- * D1 (SQLite) schema. Table/column names are snake_case; JS property names are
- * camelCase and mirror the previous Convex document shape so the rest of the
- * app keeps working with minimal changes.
+ * D1 (SQLite) schema. Table/column names are snake_case and JS property names
+ * are camelCase, matching the shape the app's client code expects.
  */
 
 export const users = sqliteTable(

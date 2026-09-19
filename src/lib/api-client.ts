@@ -22,8 +22,8 @@ export type ApiClient = {
 }
 
 /**
- * Convex-compatible client shape backed by the local RPC endpoint. Lets the
- * existing `convex.query(api.x.y, args)` call sites keep working unchanged.
+ * Data client backed by the RPC endpoint. Call sites use
+ * `apiClient.query(api.x.y, args)` / `apiClient.mutation(...)`.
  */
 export function useApi(): ApiClient {
   return {

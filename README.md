@@ -68,12 +68,10 @@ src/server/db/       Drizzle schema, client, helpers
 src/server/auth.ts   Better Auth setup
 src/lib/finance.ts   dashboard query/mutation hooks
 migrations/          D1 migrations (wrangler)
-scripts/             one-off tools (Gmail import, Convex export import)
+scripts/             one-off tools (Gmail backfill import)
 ```
 
 ## Historical note
 
-This app previously used Convex for its database, functions and auth. It was
-migrated to D1 + Drizzle + standalone Better Auth.
-`scripts/migrate-convex-export.mjs` can import an old `npx convex export`
-snapshot into D1.
+This app previously used Convex for its database, functions and auth. It now
+runs entirely on Cloudflare with an empty D1 database.

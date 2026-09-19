@@ -133,7 +133,7 @@ function getRequiredEnv(name: string, request?: Request) {
   return value
 }
 
-function getConvexClient(_request?: Request) {
+function getServerClient(_request?: Request) {
   return createServerClient()
 }
 
@@ -498,7 +498,7 @@ export async function handleGmailSync(request: Request) {
       typeof body.query === 'string' && body.query
         ? body.query
         : (getRuntimeEnv('GMAIL_QUERY', request) ?? DEFAULT_BANK_QUERY)
-    const client = getConvexClient(request)
+    const client = getServerClient(request)
     const result = await syncGmailQuery({ client, ownerEmail, query, request })
 
     return jsonResponse({ ok: true, query, ...result })
@@ -533,7 +533,7 @@ export async function handleGmailPoll(request: Request) {
       )
     }
 
-    const client = getConvexClient(request)
+    const client = getServerClient(request)
     const query = getRecentBankQuery(request)
     const result = await syncGmailQuery({
       client,
@@ -585,7 +585,7 @@ export async function handleGmailWatch(request: Request) {
       method: 'POST',
     })
 
-    const client = getConvexClient(request)
+    const client = getServerClient(request)
     await client.mutation(api.gmailSync.upsertState, {
       historyId: response.historyId,
       userEmail: ownerEmail,
@@ -697,7 +697,7 @@ export async function handleGmailPubSubWebhook(request: Request) {
       )
     }
 
-    const client = getConvexClient(request)
+    const client = getServerClient(request)
     const state = await client.query(api.gmailSync.getState, {
       userEmail: ownerEmail,
     })

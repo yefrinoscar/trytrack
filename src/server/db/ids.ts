@@ -1,7 +1,6 @@
 /**
- * ID generation. Convex IDs migrated from the old deployment are kept as-is
- * (opaque text primary keys); new rows get a URL-safe random id so they never
- * collide with migrated ones.
+ * ID generation. Primary keys are opaque text; new rows get a URL-safe random
+ * id.
  */
 export function newId(prefix?: string): string {
   const id = crypto.randomUUID().replace(/-/g, '')

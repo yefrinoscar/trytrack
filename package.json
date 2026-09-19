@@ -18,7 +18,6 @@
     "db:generate": "vp exec drizzle-kit generate && cp drizzle/*.sql migrations/",
     "db:migrate:local": "vp exec wrangler d1 migrations apply trytrack --local",
     "db:migrate:remote": "vp exec wrangler d1 migrations apply trytrack --remote",
-    "db:migrate:convex": "node scripts/migrate-convex-export.mjs",
     "import:gmail-may": "node scripts/import-gmail-may.mjs",
     "prepare": "node scripts/prepare.mjs"
   },

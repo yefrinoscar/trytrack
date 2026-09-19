@@ -1,6 +1,6 @@
 /**
- * Local replacements for the Convex generated types. Migrated ids are opaque
- * strings, so `Id<T>` is just a string alias (kept for call-site compatibility).
+ * Shared row types. Primary keys are opaque strings, so `Id<T>` is a string
+ * alias used at call sites.
  */
 export type Id<_T extends string = string> = string
 

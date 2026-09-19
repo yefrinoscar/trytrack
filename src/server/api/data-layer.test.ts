@@ -7,7 +7,7 @@ import { join } from 'node:path'
 /**
  * Integration test for the D1/Drizzle data layer. Boots a throwaway SQLite
  * database from the drizzle migration, seeds a user + debt + expense, and
- * exercises the queries/mutations that replaced the Convex functions.
+ * exercises the queries and mutations that back the app.
  *
  * Runs sequentially because it points `getDb()` at a temp LOCAL_DB_PATH.
  */

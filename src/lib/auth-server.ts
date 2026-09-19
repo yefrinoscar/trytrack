@@ -8,7 +8,7 @@ import { serializeError } from '#/lib/server-error'
 
 /**
  * Better Auth handler mounted at `/api/auth/*`. Runs in the Worker itself
- * (D1-backed) instead of proxying to a Convex HTTP action.
+ * (D1-backed) so auth is fully self-contained.
  */
 export async function handler(request: Request) {
   const cf = getCloudflareRequestInfo(request)

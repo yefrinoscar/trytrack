@@ -1,6 +1,6 @@
 /**
- * Path map used by the local RPC client. Mirrors the shape of the old Convex
- * generated `api` object so `api.debts.listByUser` etc. keep working.
+ * Path map used by the RPC client, e.g. `api.debts.listByUser`. The server
+ * dispatcher in `src/server/rpc.server.ts` resolves these strings.
  */
 export const api = {
   users: {

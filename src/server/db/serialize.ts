@@ -1,9 +1,9 @@
-/** Convex-compatible document shape returned by the local API. */
+/** Document shape returned by the data API. */
 type AppRow = { id: string; createdAt: number }
 
 /**
- * Adds the Convex-style `_id` / `_creationTime` aliases on top of a Drizzle row
- * so existing client code understands the result.
+ * Adds `_id` / `_creationTime` aliases on top of a Drizzle row. Client code
+ * reads those aliases when rendering lists.
  */
 export function toDoc<T extends AppRow>(row: T) {
   const { id, createdAt, ...rest } = row

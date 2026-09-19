@@ -6,7 +6,7 @@ import { join } from 'node:path'
 
 /**
  * Verifies the RPC dispatcher (`runRpc`) that backs `useApi().query/mutation` —
- * the path every client call goes through after leaving Convex.
+ * the path every client call goes through.
  */
 let dir: string
 
