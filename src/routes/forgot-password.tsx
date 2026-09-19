@@ -47,7 +47,7 @@ function ForgotPasswordPage() {
     setPending(true)
     try {
       const redirectTo = `${window.location.origin}/reset-password`
-      const { error: err } = await authClient.forgetPassword({
+      const { error: err } = await authClient.requestPasswordReset({
         email,
         redirectTo,
       })

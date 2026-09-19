@@ -49,4 +49,5 @@ a service where other users can connect their own Google account.
 - Gmail Watch and Pub/Sub are available, but the app also needs scheduled polling
   so expenses arrive even when Pub/Sub does not fire.
 - Before opening this to other users, the owner-only environment variables must
-  become per-user OAuth records in Convex.
+  become per-user OAuth records in D1 (`gmail_sync_states` is already keyed by
+  email; tokens still live in Worker secrets).

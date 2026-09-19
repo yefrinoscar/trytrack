@@ -1,5 +1,4 @@
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '../../convex/_generated/api'
+import { createServerClient, serverApi as api } from '../server/local-client'
 import { parseEmailExpense } from './email-expense-parser'
 
 type RuntimeGlobal = typeof globalThis & {
@@ -134,11 +133,8 @@ function getRequiredEnv(name: string, request?: Request) {
   return value
 }
 
-function getConvexClient(request?: Request) {
-  return new ConvexHttpClient(
-    getRuntimeEnv('VITE_CONVEX_URL', request) ??
-      getRequiredEnv('CONVEX_URL', request),
-  )
+function getConvexClient(_request?: Request) {
+  return createServerClient()
 }
 
 function getOwnerEmail(request?: Request, fallback?: string) {
@@ -319,7 +315,7 @@ async function saveGmailMessageExpense({
   message,
   ownerEmail,
 }: {
-  client: ConvexHttpClient
+  client: ReturnType<typeof createServerClient>
   message: GmailMessage
   ownerEmail: string
 }) {
@@ -419,7 +415,7 @@ async function syncGmailQuery({
   request,
   maxMessages,
 }: {
-  client: ConvexHttpClient
+  client: ReturnType<typeof createServerClient>
   ownerEmail: string
   query: string
   request: Request

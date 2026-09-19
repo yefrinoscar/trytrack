@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useConvex } from 'convex/react'
 import { useMemo } from 'react'
-import { api } from '../../convex/_generated/api'
-import type { Doc, Id } from '../../convex/_generated/dataModel'
+import { api } from './api-paths'
+import { useApi } from './api-client'
+import type { Doc, Id } from './db-types'
 
 export type DebtType = 'Credit card' | 'Loan' | 'Mortgage' | 'Other'
 export type DebtPaymentMode = 'installments' | 'revolving'
@@ -305,13 +305,13 @@ export const AVAILABLE_CURRENCIES = [
 ] as const
 const DEFAULT_ENABLED_CURRENCIES = ['USD', 'PEN'] as const
 
-type ConvexDebtDoc = Doc<'debts'>
+type DebtDoc = Doc<'debts'>
 
-async function getOrCreateConvexUser(
-  convex: ReturnType<typeof useConvex>,
+async function getOrCreateAppUser(
+  apiClient: ReturnType<typeof useApi>,
   currency = 'USD',
 ) {
-  return await convex.mutation(api.users.ensureCurrent, { currency })
+  return await apiClient.mutation(api.users.ensureCurrent, { currency })
 }
 
 function toDebtMutationValue(value: Omit<Debt, 'id' | 'createdAt'>) {
@@ -345,7 +345,7 @@ function toDebtMutationValue(value: Omit<Debt, 'id' | 'createdAt'>) {
   }
 }
 
-function toDebt(value: ConvexDebtDoc): Debt {
+function toDebt(value: DebtDoc): Debt {
   return {
     id: value._id,
     name: value.name,
@@ -433,20 +433,22 @@ type FinanceDashboardMutationContext = {
   previousDashboard?: DashboardData
 }
 
-async function replaceConvexDebts(
-  convex: ReturnType<typeof useConvex>,
+async function replaceDebtRows(
+  apiClient: ReturnType<typeof useApi>,
   userId: Id<'users'>,
   debts: Debt[],
 ) {
-  const existing = await convex.query(api.debts.listByUser, { userId })
+  const existing = await apiClient.query(api.debts.listByUser, { userId })
 
   await Promise.all(
-    existing.map((debt) => convex.mutation(api.debts.remove, { id: debt._id })),
+    existing.map((debt: { _id: string }) =>
+      apiClient.mutation(api.debts.remove, { id: debt._id }),
+    ),
   )
 
   await Promise.all(
     debts.map((debt) =>
-      convex.mutation(api.debts.create, {
+      apiClient.mutation(api.debts.create, {
         userId,
         ...toDebtMutationValue(debt),
       }),
@@ -883,51 +885,59 @@ function toExpenseFromEmailImport(
 }
 
 export function useFinanceDashboard(enabled = true) {
-  const convex = useConvex()
+  const apiClient = useApi()
 
   return useQuery({
     queryKey: DASHBOARD_QUERY_KEY,
     queryFn: async () => {
       const localData = await readDashboardData()
-      const user = await getOrCreateConvexUser(
-        convex,
+      const user = await getOrCreateAppUser(
+        apiClient,
         localData.settings.currency,
       )
-      let convexDebts = await convex.query(api.debts.listByUser, {
+      let debtRows = await apiClient.query(api.debts.listByUser, {
         userId: user._id,
       })
 
-      if (!convexDebts.length && localData.debts.length) {
+      if (!debtRows.length && localData.debts.length) {
         await Promise.all(
           localData.debts.map((debt) =>
-            convex.mutation(api.debts.create, {
+            apiClient.mutation(api.debts.create, {
               userId: user._id,
               ...toDebtMutationValue(debt),
             }),
           ),
         )
 
-        convexDebts = await convex.query(api.debts.listByUser, {
+        debtRows = await apiClient.query(api.debts.listByUser, {
           userId: user._id,
         })
       }
 
-      const installmentOverview = convexDebts.length
-        ? await convex.query(api.debts.getInstallmentOverview, {
-            debtIds: convexDebts.map((debt) => debt._id),
+      const installmentOverview = debtRows.length
+        ? await apiClient.query(api.debts.getInstallmentOverview, {
+            debtIds: debtRows.map((debt: { _id: string }) => debt._id),
           })
         : []
       const installmentOverviewByDebtId = new Map(
-        installmentOverview.map((item) => [item.debtId, item]),
+        installmentOverview.map(
+          (item: {
+            debtId: string
+            originalBalance: number
+            currentPlanVersion: number
+            plans: DebtInstallmentPlan[]
+            payments: DebtInstallmentPayment[]
+          }) => [item.debtId, item] as const,
+        ),
       )
-      const emailExpenseImports = await convex.query(
+      const emailExpenseImports = await apiClient.query(
         api.expenses.listPendingEmailImports,
         {},
       )
 
       return {
         ...localData,
-        emailExpenseImports: emailExpenseImports.map((item) => ({
+        emailExpenseImports: emailExpenseImports.map((item: any) => ({
           id: item._id,
           emailId: item.emailId,
           messageId: item.messageId,
@@ -945,9 +955,16 @@ export function useFinanceDashboard(enabled = true) {
           createdAt: new Date(item.createdAt).toISOString(),
           updatedAt: new Date(item.updatedAt).toISOString(),
         })),
-        debts: convexDebts.map((debt) => {
+        debts: debtRows.map((debt: any) => {
           const nextDebt = toDebt(debt)
-          const overview = installmentOverviewByDebtId.get(debt._id)
+          const overview = installmentOverviewByDebtId.get(debt._id) as
+            | {
+                originalBalance: number
+                currentPlanVersion: number
+                plans: DebtInstallmentPlan[]
+                payments: DebtInstallmentPayment[]
+              }
+            | undefined
 
           if (!overview) {
             return nextDebt
@@ -960,7 +977,9 @@ export function useFinanceDashboard(enabled = true) {
             }),
           )
           const installmentPayments: DebtInstallmentPayment[] =
-            overview.payments.map((payment) => ({ ...payment }))
+            overview.payments.map(
+              (payment) => ({ ...payment }) as DebtInstallmentPayment,
+            )
 
           const activePlan =
             installmentPlans.find((plan) => plan.status === 'active') ??
@@ -986,7 +1005,7 @@ export function useFinanceDashboard(enabled = true) {
 }
 
 export function useFinanceActions() {
-  const convex = useConvex()
+  const apiClient = useApi()
   const queryClient = useQueryClient()
 
   const syncCache = (next: DashboardData) => {
@@ -1013,12 +1032,12 @@ export function useFinanceActions() {
     mutationFn: async (input: CreateItemInput) => {
       if (input.kind === 'debts') {
         const localData = await readDashboardData()
-        const user = await getOrCreateConvexUser(
-          convex,
+        const user = await getOrCreateAppUser(
+          apiClient,
           localData.settings.currency,
         )
 
-        await convex.mutation(api.debts.create, {
+        await apiClient.mutation(api.debts.create, {
           userId: user._id,
           ...toDebtMutationValue(input.value),
         })
@@ -1137,7 +1156,7 @@ export function useFinanceActions() {
       id: string
     }) => {
       if (kind === 'debts') {
-        await convex.mutation(api.debts.remove, { id: id as Id<'debts'> })
+        await apiClient.mutation(api.debts.remove, { id: id as Id<'debts'> })
         return null
       }
 
@@ -1194,7 +1213,7 @@ export function useFinanceActions() {
       const item =
         cached?.emailExpenseImports.find((entry) => entry.id === id) ?? null
 
-      await convex.mutation(api.expenses.confirmEmailImport, {
+      await apiClient.mutation(api.expenses.confirmEmailImport, {
         ...(category ? { category } : {}),
         id: id as Id<'emailExpenseImports'>,
       })
@@ -1271,7 +1290,7 @@ export function useFinanceActions() {
 
   const dismissEmailExpenseImportMutation = useMutation({
     mutationFn: async (id: string) => {
-      await convex.mutation(api.expenses.dismissEmailImport, {
+      await apiClient.mutation(api.expenses.dismissEmailImport, {
         id: id as Id<'emailExpenseImports'>,
       })
       return null
@@ -1304,7 +1323,7 @@ export function useFinanceActions() {
 
   const updateEmailExpenseImportCategoryMutation = useMutation({
     mutationFn: async ({ category, id }: { category: string; id: string }) => {
-      await convex.mutation(api.expenses.updateEmailImportCategory, {
+      await apiClient.mutation(api.expenses.updateEmailImportCategory, {
         category,
         id: id as Id<'emailExpenseImports'>,
       })
@@ -1365,7 +1384,7 @@ export function useFinanceActions() {
 
   const updateDebtMutation = useMutation({
     mutationFn: async ({ id, value }: UpdateDebtInput) => {
-      await convex.mutation(api.debts.update, {
+      await apiClient.mutation(api.debts.update, {
         id: id as Id<'debts'>,
         ...toDebtMutationValue(value),
       })
@@ -1422,7 +1441,7 @@ export function useFinanceActions() {
       expectedInstallmentNumber,
       paidAt,
     }: PayDebtInstallmentInput) => {
-      await convex.mutation(api.debts.payNextInstallment, {
+      await apiClient.mutation(api.debts.payNextInstallment, {
         debtId: debtId as Id<'debts'>,
         expectedInstallmentNumber,
         ...(paidAt ? { paidAt } : {}),
@@ -1526,7 +1545,7 @@ export function useFinanceActions() {
       debtId,
       payments,
     }: RestructureDebtInstallmentsInput) => {
-      await convex.mutation(api.debts.restructureInstallments, {
+      await apiClient.mutation(api.debts.restructureInstallments, {
         debtId: debtId as Id<'debts'>,
         payments,
       })
@@ -1544,7 +1563,7 @@ export function useFinanceActions() {
       expectedInstallmentNumber,
       paidAt,
     }: PayCustomAmountInput) => {
-      await convex.mutation(api.debts.payCustomAmount, {
+      await apiClient.mutation(api.debts.payCustomAmount, {
         debtId: debtId as Id<'debts'>,
         amountPaid,
         expectedInstallmentNumber,
@@ -1660,7 +1679,7 @@ export function useFinanceActions() {
       debtId,
       installmentAmount,
     }: UpdateInstallmentAmountInput) => {
-      await convex.mutation(api.debts.updateInstallmentAmount, {
+      await apiClient.mutation(api.debts.updateInstallmentAmount, {
         debtId: debtId as Id<'debts'>,
         installmentAmount,
       })
@@ -1673,7 +1692,7 @@ export function useFinanceActions() {
 
   const undoDebtPaymentMutation = useMutation({
     mutationFn: async ({ debtId, paymentId }: UndoDebtPaymentInput) => {
-      await convex.mutation(api.debts.undoLastPayment, {
+      await apiClient.mutation(api.debts.undoLastPayment, {
         debtId: debtId as Id<'debts'>,
         paymentId: paymentId as Id<'debtPayments'>,
       })
@@ -1817,8 +1836,8 @@ export function useFinanceActions() {
   const resetDemoDataMutation = useMutation({
     mutationFn: async () => {
       const next = cloneDashboardData(seedData)
-      const user = await getOrCreateConvexUser(convex, next.settings.currency)
-      await replaceConvexDebts(convex, user._id, next.debts)
+      const user = await getOrCreateAppUser(apiClient, next.settings.currency)
+      await replaceDebtRows(apiClient, user._id, next.debts)
       return writeDashboardData(next)
     },
     onSuccess: (next) => {
@@ -1830,8 +1849,8 @@ export function useFinanceActions() {
   const clearDashboardMutation = useMutation({
     mutationFn: async (currency: string) => {
       const next = emptyDashboardData(currency)
-      const user = await getOrCreateConvexUser(convex, currency)
-      await replaceConvexDebts(convex, user._id, [])
+      const user = await getOrCreateAppUser(apiClient, currency)
+      await replaceDebtRows(apiClient, user._id, [])
       return writeDashboardData(next)
     },
     onSuccess: (next) => {

@@ -1,220 +1,79 @@
-Welcome to your new TanStack Start app!
+# Trytracker
 
-# Getting Started
+Personal finance tracker for debts, recurring payments and email-imported
+expenses. Runs entirely on Cloudflare Workers with a D1 (SQLite) database.
 
-To run this application:
+- **App**: TanStack Start + Router + Query (React 19), Tailwind + shadcn
+- **Database**: Cloudflare D1 via Drizzle ORM
+- **Auth**: Better Auth (email + password), D1-backed
+- **Hosting**: Cloudflare Workers (`trytrack`), Nitro `cloudflare_module` preset
+
+See [docs/architecture.md](docs/architecture.md) for how the pieces fit together.
+
+## Getting started
 
 ```bash
 vp install
+cp .env.example .env.local   # set BETTER_AUTH_SECRET and SITE_URL
+vp run db:migrate:local      # create the local D1 schema
 vp dev --port 3000
 ```
 
-# Building For Production
+`vp dev` uses a local SQLite file when the D1 binding is absent. Set
+`LOCAL_DB_PATH` to use a different file.
 
-To build this application for production:
+## Commands
+
+```bash
+vp dev --port 3000      # dev server
+vp build                # production build (Cloudflare Worker)
+vp test                 # unit + data-layer integration tests
+vp check                # format, lint and type check
+vp check --fix          # apply formatting/lint fixes
+vp run deploy:worker    # deploy with wrangler
+```
+
+Database:
+
+```bash
+vp run db:generate       # drizzle-kit generate + copy into migrations/
+vp run db:migrate:local  # apply migrations to local D1
+vp run db:migrate:remote # apply migrations to production D1
+```
+
+## Deploying
 
 ```bash
 vp build
-```
-
-## Cloudflare Workers
-
-This project is configured to build with Nitro's `cloudflare_module` preset.
-
-After building, preview or deploy with Wrangler:
-
-```bash
-vp run preview:worker
+vp run db:migrate:remote
 vp run deploy:worker
 ```
 
-## Testing
-
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
+Set the Worker secrets before deploying:
 
 ```bash
-vp test
+npx wrangler secret put BETTER_AUTH_SECRET
+npx wrangler secret put SITE_URL           # e.g. https://trytrack.underlabs.dev
 ```
 
-## Styling
+The D1 binding (`DB`) is declared in `vite.config.ts` and generated into
+`.output/server/wrangler.json` at build time.
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
+## Project layout
 
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `vp remove @tailwindcss/vite tailwindcss`
-
-## Linting & Formatting
-
-This project uses [Oxlint](https://oxc.rs/docs/guide/usage/linter.html) and [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) through [Vite+](https://viteplus.dev/). The most useful commands are:
-
-```bash
-vp lint
-vp fmt --check .
-vp check
+```
+src/routes/          file-based routes (pages + /api handlers)
+src/server/api/      D1 data functions (debts, expenses, users, …)
+src/server/db/       Drizzle schema, client, helpers
+src/server/auth.ts   Better Auth setup
+src/lib/finance.ts   dashboard query/mutation hooks
+migrations/          D1 migrations (wrangler)
+scripts/             one-off tools (Gmail import, Convex export import)
 ```
 
-## Shadcn
+## Historical note
 
-Add components using the latest version of [Shadcn](https://ui.shadcn.com/).
-
-```bash
-vp dlx shadcn@latest add button
-```
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from '@tanstack/react-router'
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+This app previously used Convex for its database, functions and auth. It was
+migrated to D1 + Drizzle + standalone Better Auth.
+`scripts/migrate-convex-export.mjs` can import an old `npx convex export`
+snapshot into D1.

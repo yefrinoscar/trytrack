@@ -42,7 +42,6 @@ function authDebugContext(mode: 'signIn' | 'signUp', redirect: string) {
     pageOrigin: window.location.origin,
     pageHref: window.location.href,
     configuredSiteUrl: import.meta.env.VITE_SITE_URL ?? null,
-    convexSiteUrl: import.meta.env.VITE_CONVEX_SITE_URL ?? null,
     authEndpoint: `${window.location.origin}/api/auth`,
   }
 }
@@ -64,8 +63,8 @@ function logAuthError(
     console.warn(
       [
         'Better Auth rejected this request because the browser origin is not trusted by the auth server.',
-        'Make sure the exact URL shown as pageOrigin is included in the Convex auth trusted origins.',
-        'For local dev, SITE_URL/TRUSTED_ORIGINS in the Convex deployment should match the URL and port you opened in the browser.',
+        'Make sure the exact URL shown as pageOrigin is included in the auth server trusted origins.',
+        'For local dev, SITE_URL/TRUSTED_ORIGINS should match the URL and port you opened in the browser.',
       ].join(' '),
     )
   }

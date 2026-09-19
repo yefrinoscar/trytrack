@@ -7,7 +7,7 @@ Support debt installment payments with:
 - sequential monthly payments,
 - exact payment date and amount per installment,
 - plan recalculation without losing history,
-- concurrency-safe writes in Convex.
+- concurrency-safe writes in D1 (single SQL statement per step, `requestId` idempotency).
 
 ## Data Model
 
@@ -126,7 +126,8 @@ Every payment mutation includes `requestId`.
 
 ### One transaction per payment
 
-Each installment payment is processed in one Convex mutation:
+Each installment payment is processed in one server call
+(`debts.payNextInstallment` in `src/server/api/debts.ts`):
 
 1. validate debt and active plan,
 2. validate next installment number,

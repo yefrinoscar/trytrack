@@ -30,13 +30,34 @@ export default defineConfig({
     trailingComma: 'all',
     printWidth: 80,
     sortPackageJson: false,
-    ignorePatterns: ['package-lock.json', 'yarn.lock'],
+    ignorePatterns: [
+      'package-lock.json',
+      'yarn.lock',
+      'drizzle/meta/**',
+      'drizzle/seed.sql',
+    ],
   },
   resolve: {
     tsconfigPaths: true,
+    // `clsx` is used by `cva` (every UI component) and `cn()`. The SSR bundler
+    // otherwise parks clsx inside the browser-only @tanstack/router-devtools-core
+    // chunk, whose module scope calls `window`/`document` and crashes the
+    // Cloudflare Worker on every render. Resolving clsx to a local,
+    // dependency-free shim keeps that code out of the server bundle.
+    alias: [
+      { find: /^clsx$/, replacement: '/src/lib/clsx.ts' },
+      {
+        find: /^@tanstack\/router-devtools-core$/,
+        replacement: '/src/lib/devtools-stub.ts',
+      },
+      {
+        find: /^@tanstack\/react-router-devtools$/,
+        replacement: '/src/lib/devtools-stub.ts',
+      },
+    ],
   },
   ssr: {
-    noExternal: ['@convex-dev/better-auth'],
+    noExternal: ['better-auth'],
   },
   test: {
     environment: 'node',
@@ -56,7 +77,7 @@ export default defineConfig({
   plugins: isTest
     ? [viteReact()]
     : [
-        devtools(),
+        ...(isServe ? [devtools()] : []),
         tanstackStart(),
         viteReact(),
         tailwindcss(),
@@ -65,14 +86,20 @@ export default defineConfig({
             ? {
                 preset: 'node',
                 errorHandler: nitroErrorHandler,
-                logging: { compressed: false },
+                logging: { compressedSizes: false },
                 plugins: ['./src/lib/gmail-scheduled-sync.ts'],
-                rollupConfig: { external: [/^@sentry\//] },
+                rollupConfig: {
+                  external: [
+                    /^@sentry\//,
+                    'better-sqlite3',
+                    'drizzle-orm/better-sqlite3',
+                  ],
+                },
               }
             : {
                 preset: 'cloudflare_module',
                 errorHandler: nitroErrorHandler,
-                logging: { compressed: false },
+                logging: { compressedSizes: false },
                 plugins: ['./src/lib/gmail-scheduled-sync.ts'],
                 cloudflare: {
                   deployConfig: true,
@@ -82,6 +109,14 @@ export default defineConfig({
                     keep_vars: true,
                     name: 'trytrack',
                     no_bundle: false,
+                    d1_databases: [
+                      {
+                        binding: 'DB',
+                        database_name: 'trytrack',
+                        database_id: '99b3d804-614d-420f-86e1-d2fc0eec9d8b',
+                        migrations_dir: '../../migrations',
+                      },
+                    ],
                     triggers: {
                       crons: ['*/15 * * * *', '0 */12 * * *'],
                     },
@@ -93,7 +128,21 @@ export default defineConfig({
                     },
                   },
                 },
-                rollupConfig: { external: [/^@sentry\//] },
+                rollupConfig: {
+                  external: [
+                    /^@sentry\//,
+                    'better-sqlite3',
+                    'drizzle-orm/better-sqlite3',
+                  ],
+                  output: {
+                    manualChunks: (id: string) => {
+                      if (id.includes('src/lib/clsx')) {
+                        return 'clsx-shim'
+                      }
+                      return undefined
+                    },
+                  },
+                },
               },
         ),
       ],

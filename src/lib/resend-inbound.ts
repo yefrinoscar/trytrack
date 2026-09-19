@@ -1,6 +1,5 @@
 import { logError, logInfo, logWarn } from './server-logger'
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '../../convex/_generated/api'
+import { createServerClient, serverApi as api } from '../server/local-client'
 import { parseEmailExpense } from './email-expense-parser'
 
 interface ResendAttachmentMetadata {
@@ -350,20 +349,6 @@ async function saveEmailExpenseImport({
   request: Request
   summary: ReturnType<typeof summarizeReceivedEmail>
 }) {
-  const convexUrl =
-    getRuntimeEnv('VITE_CONVEX_URL', request) ??
-    getRuntimeEnv('CONVEX_URL', request)
-
-  if (!convexUrl) {
-    logWarn({
-      event: 'resend.email_import.not_saved',
-      message: 'VITE_CONVEX_URL is not configured; skipping import save.',
-      request,
-      context: { emailId: summary.emailId },
-    })
-    return null
-  }
-
   const parsed = parseEmailExpense({
     text: email.text ?? '',
     from: email.from ?? summary.from,
@@ -389,7 +374,7 @@ async function saveEmailExpenseImport({
     return null
   }
 
-  const client = new ConvexHttpClient(convexUrl)
+  const client = createServerClient()
 
   return await client.mutation(api.expenses.importFromEmail, {
     userEmail: parsed.ownerEmail,
