@@ -4,14 +4,28 @@ import { gmailSyncStates } from '../db/schema'
 import { newId } from '../db/ids'
 
 export async function getState(args: { userEmail: string }) {
+  return await getGmailSyncState(args.userEmail)
+}
+
+/** Direct helper used by the sync job (no RPC args wrapper). */
+export async function getGmailSyncState(userEmail: string) {
   const db = await getDb()
-  const userEmail = args.userEmail.toLowerCase()
+  const email = userEmail.toLowerCase()
   const [row] = await db
     .select()
     .from(gmailSyncStates)
-    .where(eq(gmailSyncStates.userEmail, userEmail))
+    .where(eq(gmailSyncStates.userEmail, email))
     .limit(1)
   return row ?? null
+}
+
+/** Direct helper used by the sync job; only touches the columns provided. */
+export async function upsertGmailSyncState(args: {
+  userEmail: string
+  historyId?: string
+  watchExpiration?: number
+}) {
+  return await upsertState(args)
 }
 
 export async function upsertState(args: {

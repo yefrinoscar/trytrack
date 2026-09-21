@@ -25,6 +25,8 @@ import { Route as ApiEmailGmailWebhookRouteImport } from './routes/api/email/gma
 import { Route as ApiEmailGmailWatchRouteImport } from './routes/api/email/gmail/watch'
 import { Route as ApiEmailGmailSyncRouteImport } from './routes/api/email/gmail/sync'
 import { Route as ApiEmailGmailPollRouteImport } from './routes/api/email/gmail/poll'
+import { Route as ApiEmailGmailConnectRouteImport } from './routes/api/email/gmail/connect'
+import { Route as ApiEmailGmailCallbackRouteImport } from './routes/api/email/gmail/callback'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -106,6 +108,16 @@ const ApiEmailGmailPollRoute = ApiEmailGmailPollRouteImport.update({
   path: '/api/email/gmail/poll',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEmailGmailConnectRoute = ApiEmailGmailConnectRouteImport.update({
+  id: '/api/email/gmail/connect',
+  path: '/api/email/gmail/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmailGmailCallbackRoute = ApiEmailGmailCallbackRouteImport.update({
+  id: '/api/email/gmail/callback',
+  path: '/api/email/gmail/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -120,6 +132,8 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
+  '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
   '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
   '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
@@ -138,6 +152,8 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
+  '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
   '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
   '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
@@ -157,6 +173,8 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
+  '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
   '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
   '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
@@ -177,6 +195,8 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/callback'
+    | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
     | '/api/email/gmail/sync'
     | '/api/email/gmail/watch'
@@ -195,6 +215,8 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/callback'
+    | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
     | '/api/email/gmail/sync'
     | '/api/email/gmail/watch'
@@ -213,6 +235,8 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/callback'
+    | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
     | '/api/email/gmail/sync'
     | '/api/email/gmail/watch'
@@ -232,6 +256,8 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiEmailBackfillRoute: typeof ApiEmailBackfillRoute
   ApiEmailInboundRoute: typeof ApiEmailInboundRoute
+  ApiEmailGmailCallbackRoute: typeof ApiEmailGmailCallbackRoute
+  ApiEmailGmailConnectRoute: typeof ApiEmailGmailConnectRoute
   ApiEmailGmailPollRoute: typeof ApiEmailGmailPollRoute
   ApiEmailGmailSyncRoute: typeof ApiEmailGmailSyncRoute
   ApiEmailGmailWatchRoute: typeof ApiEmailGmailWatchRoute
@@ -352,6 +378,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiEmailGmailPollRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/email/gmail/connect': {
+      id: '/api/email/gmail/connect'
+      path: '/api/email/gmail/connect'
+      fullPath: '/api/email/gmail/connect'
+      preLoaderRoute: typeof ApiEmailGmailConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/email/gmail/callback': {
+      id: '/api/email/gmail/callback'
+      path: '/api/email/gmail/callback'
+      fullPath: '/api/email/gmail/callback'
+      preLoaderRoute: typeof ApiEmailGmailCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -368,6 +408,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiEmailBackfillRoute: ApiEmailBackfillRoute,
   ApiEmailInboundRoute: ApiEmailInboundRoute,
+  ApiEmailGmailCallbackRoute: ApiEmailGmailCallbackRoute,
+  ApiEmailGmailConnectRoute: ApiEmailGmailConnectRoute,
   ApiEmailGmailPollRoute: ApiEmailGmailPollRoute,
   ApiEmailGmailSyncRoute: ApiEmailGmailSyncRoute,
   ApiEmailGmailWatchRoute: ApiEmailGmailWatchRoute,

@@ -24,6 +24,11 @@ async function findByEmail(email: string) {
   return row ?? null
 }
 
+/** Lookup used by server-side jobs (webhooks, cron) that run without a session. */
+export async function findUserByEmail(email: string) {
+  return await findByEmail(email.toLowerCase())
+}
+
 export async function getByEmail(args: { email: string }) {
   const email = await requireSessionEmail()
   if (email !== args.email) {

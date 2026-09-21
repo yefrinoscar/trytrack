@@ -219,6 +219,30 @@ export const gmailSyncStates = sqliteTable(
   ],
 )
 
+/**
+ * Per-user Gmail OAuth connection created from the "Connect Gmail" button.
+ * Tokens are written by the OAuth callback and read by the sync job, so the app
+ * no longer depends on a single owner token stored in Worker secrets.
+ */
+export const gmailConnections = sqliteTable(
+  'gmail_connections',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    email: text('email').notNull(),
+    refreshToken: text('refresh_token').notNull(),
+    scope: text('scope'),
+    connectedAt: integer('connected_at').notNull(),
+    lastSyncedAt: integer('last_synced_at'),
+    lastError: text('last_error'),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('gmail_connections_by_user_id').on(table.userId),
+    uniqueIndex('gmail_connections_by_email').on(table.email),
+  ],
+)
+
 /* --------------------------------------------------------------------------
  * Better Auth tables (standalone, Drizzle adapter, provider: 'sqlite')
  * ------------------------------------------------------------------------ */
@@ -303,6 +327,7 @@ export const schema = {
   expenses,
   emailExpenseImports,
   gmailSyncStates,
+  gmailConnections,
   authUser,
   authSession,
   authAccount,
