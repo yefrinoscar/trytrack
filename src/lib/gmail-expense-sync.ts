@@ -1,16 +1,13 @@
 import { createServerClient, serverApi as api } from '../server/local-client'
 import {
-  getGmailConnectionByEmail,
   listGmailConnections,
   markGmailConnectionError,
   markGmailConnectionSynced,
-  upsertGmailConnection,
 } from '../server/api/gmailOAuth'
 import {
   getGmailSyncState,
   upsertGmailSyncState,
 } from '../server/api/gmailSync'
-import { findUserByEmail } from '../server/api/users'
 import { parseEmailExpense } from './email-expense-parser'
 
 type RuntimeGlobal = typeof globalThis & {
@@ -607,56 +604,6 @@ export async function handleGmailSync(request: Request) {
   }
 }
 
-/**
- * Migrates the legacy single-owner token (Worker secret) into a per-user
- * connection the first time the cron runs, so existing installs keep working
- * after the "Connect Gmail" flow was introduced.
- */
-async function migrateLegacyOwnerToken(): Promise<void> {
-  try {
-    const legacyRefreshToken =
-      getRuntimeEnv('GMAIL_REFRESH_TOKEN') ??
-      getRuntimeEnv('GOOGLE_REFRESH_TOKEN')
-    const ownerEmail = getRuntimeEnv('OWNER_EMAIL')?.toLowerCase()
-
-    if (!legacyRefreshToken || !ownerEmail) {
-      return
-    }
-
-    if (await getGmailConnectionByEmail(ownerEmail)) {
-      return
-    }
-
-    const user = await findUserByEmail(ownerEmail)
-    if (!user) {
-      return
-    }
-
-    await upsertGmailConnection({
-      userId: user.id,
-      email: ownerEmail,
-      refreshToken: legacyRefreshToken,
-      scope: 'https://www.googleapis.com/auth/gmail.readonly',
-    })
-
-    console.info(
-      JSON.stringify({
-        level: 'info',
-        event: 'gmail.connection.legacy_migrated',
-        email: ownerEmail,
-      }),
-    )
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        level: 'error',
-        event: 'gmail.connection.legacy_migration_failed',
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    )
-  }
-}
-
 export async function handleGmailPoll(request: Request) {
   try {
     if (request.method === 'OPTIONS') {
@@ -673,8 +620,6 @@ export async function handleGmailPoll(request: Request) {
     if (!isAuthorizedCronRequest(request)) {
       return jsonResponse({ error: 'Unauthorized.' }, { status: 401 })
     }
-
-    await migrateLegacyOwnerToken()
 
     const query = getRecentBankQuery(request)
     const result = await syncAllConnections({
