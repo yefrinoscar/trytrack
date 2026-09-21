@@ -83,6 +83,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     const isAuthenticated = auth.isAuthenticated
 
     const publicRoutes = [
+      '/',
       '/login',
       '/forgot-password',
       '/reset-password',
@@ -92,7 +93,8 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     const isPublicRoute = publicRoutes.includes(pathname)
 
     if (isPublicRoute) {
-      if (isAuthenticated && pathname === '/login') {
+      // Signed-in visitors skip the marketing page and go straight to the app.
+      if (isAuthenticated && (pathname === '/login' || pathname === '/')) {
         throw redirect({ to: '/debts' })
       }
       return { isAuthenticated }
