@@ -9,8 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InvestmentsRouteImport } from './routes/investments'
 import { Route as IncomesRouteImport } from './routes/incomes'
@@ -25,7 +27,14 @@ import { Route as ApiEmailGmailWebhookRouteImport } from './routes/api/email/gma
 import { Route as ApiEmailGmailWatchRouteImport } from './routes/api/email/gmail/watch'
 import { Route as ApiEmailGmailSyncRouteImport } from './routes/api/email/gmail/sync'
 import { Route as ApiEmailGmailPollRouteImport } from './routes/api/email/gmail/poll'
+import { Route as ApiEmailGmailConnectRouteImport } from './routes/api/email/gmail/connect'
+import { Route as ApiEmailGmailCallbackRouteImport } from './routes/api/email/gmail/callback'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -34,6 +43,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -106,6 +120,16 @@ const ApiEmailGmailPollRoute = ApiEmailGmailPollRouteImport.update({
   path: '/api/email/gmail/poll',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEmailGmailConnectRoute = ApiEmailGmailConnectRouteImport.update({
+  id: '/api/email/gmail/connect',
+  path: '/api/email/gmail/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmailGmailCallbackRoute = ApiEmailGmailCallbackRouteImport.update({
+  id: '/api/email/gmail/callback',
+  path: '/api/email/gmail/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -115,11 +139,15 @@ export interface FileRoutesByFullPath {
   '/incomes': typeof IncomesRoute
   '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
+  '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
   '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
   '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
@@ -133,11 +161,15 @@ export interface FileRoutesByTo {
   '/incomes': typeof IncomesRoute
   '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
+  '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
   '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
   '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
@@ -152,11 +184,15 @@ export interface FileRoutesById {
   '/incomes': typeof IncomesRoute
   '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
+  '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
   '/api/email/gmail/sync': typeof ApiEmailGmailSyncRoute
   '/api/email/gmail/watch': typeof ApiEmailGmailWatchRoute
@@ -172,11 +208,15 @@ export interface FileRouteTypes {
     | '/incomes'
     | '/investments'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/settings'
+    | '/terms'
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/callback'
+    | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
     | '/api/email/gmail/sync'
     | '/api/email/gmail/watch'
@@ -190,11 +230,15 @@ export interface FileRouteTypes {
     | '/incomes'
     | '/investments'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/settings'
+    | '/terms'
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/callback'
+    | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
     | '/api/email/gmail/sync'
     | '/api/email/gmail/watch'
@@ -208,11 +252,15 @@ export interface FileRouteTypes {
     | '/incomes'
     | '/investments'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/settings'
+    | '/terms'
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/email/gmail/callback'
+    | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
     | '/api/email/gmail/sync'
     | '/api/email/gmail/watch'
@@ -227,11 +275,15 @@ export interface RootRouteChildren {
   IncomesRoute: typeof IncomesRoute
   InvestmentsRoute: typeof InvestmentsRoute
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
+  TermsRoute: typeof TermsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiEmailBackfillRoute: typeof ApiEmailBackfillRoute
   ApiEmailInboundRoute: typeof ApiEmailInboundRoute
+  ApiEmailGmailCallbackRoute: typeof ApiEmailGmailCallbackRoute
+  ApiEmailGmailConnectRoute: typeof ApiEmailGmailConnectRoute
   ApiEmailGmailPollRoute: typeof ApiEmailGmailPollRoute
   ApiEmailGmailSyncRoute: typeof ApiEmailGmailSyncRoute
   ApiEmailGmailWatchRoute: typeof ApiEmailGmailWatchRoute
@@ -240,6 +292,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -252,6 +311,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -352,6 +418,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiEmailGmailPollRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/email/gmail/connect': {
+      id: '/api/email/gmail/connect'
+      path: '/api/email/gmail/connect'
+      fullPath: '/api/email/gmail/connect'
+      preLoaderRoute: typeof ApiEmailGmailConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/email/gmail/callback': {
+      id: '/api/email/gmail/callback'
+      path: '/api/email/gmail/callback'
+      fullPath: '/api/email/gmail/callback'
+      preLoaderRoute: typeof ApiEmailGmailCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -363,11 +443,15 @@ const rootRouteChildren: RootRouteChildren = {
   IncomesRoute: IncomesRoute,
   InvestmentsRoute: InvestmentsRoute,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
+  TermsRoute: TermsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiEmailBackfillRoute: ApiEmailBackfillRoute,
   ApiEmailInboundRoute: ApiEmailInboundRoute,
+  ApiEmailGmailCallbackRoute: ApiEmailGmailCallbackRoute,
+  ApiEmailGmailConnectRoute: ApiEmailGmailConnectRoute,
   ApiEmailGmailPollRoute: ApiEmailGmailPollRoute,
   ApiEmailGmailSyncRoute: ApiEmailGmailSyncRoute,
   ApiEmailGmailWatchRoute: ApiEmailGmailWatchRoute,

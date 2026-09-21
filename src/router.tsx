@@ -5,49 +5,25 @@ import {
   hydrate,
   notifyManager,
 } from '@tanstack/react-query'
-import { ConvexQueryClient } from '@convex-dev/react-query'
-import {
-  getConvexUrlError,
-  getOptionalConvexUrl,
-} from '#/lib/convex-public-env'
 import { routeTree } from './routeTree.gen'
-
-type AppStartupError = {
-  message: string
-}
 
 export function getRouter() {
   if (typeof document !== 'undefined') {
     notifyManager.setScheduler(window.requestAnimationFrame)
   }
 
-  const convexUrl = getOptionalConvexUrl()
-  const convexUrlError = getConvexUrlError()
-  const startupError: AppStartupError | null = convexUrlError
-    ? { message: convexUrlError }
-    : null
-
-  const convexQueryClient = convexUrl
-    ? new ConvexQueryClient(convexUrl, {
-        expectAuth: false,
-      })
-    : null
-
   const queryClient = new QueryClient({
     defaultOptions: {
-      queries: convexQueryClient
-        ? {
-            queryKeyHashFn: convexQueryClient.hashFn(),
-            queryFn: convexQueryClient.queryFn(),
-          }
-        : {},
+      queries: {
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
+      },
     },
   })
-  convexQueryClient?.connect(queryClient)
 
   const router = createTanStackRouter({
     routeTree,
-    context: { queryClient, convexQueryClient, startupError },
+    context: { queryClient },
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,

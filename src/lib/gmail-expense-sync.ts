@@ -1,5 +1,16 @@
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '../../convex/_generated/api'
+import { createServerClient, serverApi as api } from '../server/local-client'
+import {
+  getGmailConnectionByEmail,
+  listGmailConnections,
+  markGmailConnectionError,
+  markGmailConnectionSynced,
+  upsertGmailConnection,
+} from '../server/api/gmailOAuth'
+import {
+  getGmailSyncState,
+  upsertGmailSyncState,
+} from '../server/api/gmailSync'
+import { findUserByEmail } from '../server/api/users'
 import { parseEmailExpense } from './email-expense-parser'
 
 type RuntimeGlobal = typeof globalThis & {
@@ -59,12 +70,10 @@ interface PubSubPushBody {
 const DEFAULT_BANK_QUERY =
   '(from:notificaciones@yape.pe OR from:procesos@bbva.com.pe OR from:yape@bcp.com.pe OR from:notificaciones@notificacionesbcp.com.pe OR yape OR bbva OR plin)'
 
-let gmailAccessTokenCache:
-  | {
-      accessToken: string
-      expiresAt: number
-    }
-  | undefined
+let gmailAccessTokenCache = new Map<
+  string,
+  { accessToken: string; expiresAt: number }
+>()
 
 class GmailApiError extends Error {
   status: number
@@ -134,19 +143,100 @@ function getRequiredEnv(name: string, request?: Request) {
   return value
 }
 
-function getConvexClient(request?: Request) {
-  return new ConvexHttpClient(
-    getRuntimeEnv('VITE_CONVEX_URL', request) ??
-      getRequiredEnv('CONVEX_URL', request),
-  )
+function getServerClient(_request?: Request) {
+  return createServerClient()
 }
 
-function getOwnerEmail(request?: Request, fallback?: string) {
-  return (
-    getRuntimeEnv('OWNER_EMAIL', request) ??
-    getRuntimeEnv('GMAIL_USER_EMAIL', request) ??
-    fallback
-  )?.toLowerCase()
+/** Cron/webhook callers authenticate with the shared sync secret. */
+function isAuthorizedCronRequest(request: Request) {
+  const secret = getRuntimeEnv('GMAIL_SYNC_SECRET', request)
+  if (!secret) {
+    // No secret configured: allow (matches the previous behaviour).
+    return true
+  }
+  return request.headers.get('authorization') === `Bearer ${secret}`
+}
+
+/**
+ * Runs the sync for every connected account, isolating failures so one broken
+ * token cannot stop the others.
+ */
+async function syncAllConnections({
+  query,
+  request,
+  maxMessages,
+}: {
+  query: string
+  request: Request
+  maxMessages?: number
+}) {
+  const connections = await listGmailConnections()
+  const client = getServerClient(request)
+
+  let saved = 0
+  let skipped = 0
+  let matched = 0
+  const failures: Array<{ email: string; error: string }> = []
+
+  for (const connection of connections) {
+    try {
+      const result = await syncGmailQuery({
+        client,
+        maxMessages,
+        ownerEmail: connection.email,
+        query,
+        refreshToken: connection.refreshToken,
+        request,
+      })
+
+      matched += result.matched
+      saved += result.saved
+      skipped += result.skipped
+
+      await upsertGmailSyncState({
+        userEmail: connection.email,
+      })
+      await markGmailConnectionSynced(connection.userId, Date.now())
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      failures.push({ email: connection.email, error: message })
+      await markGmailConnectionError(connection.userId, message)
+
+      console.error(
+        JSON.stringify({
+          level: 'error',
+          event: 'gmail.sync.connection_failed',
+          email: connection.email,
+          error: message,
+        }),
+      )
+    }
+  }
+
+  return {
+    accounts: connections.length,
+    matched,
+    saved,
+    skipped,
+    ...(failures.length ? { failures } : {}),
+  }
+}
+
+/** Finds the connection a Pub/Sub notification belongs to. */
+async function findConnectionForNotification(emailAddress?: string) {
+  const connections = await listGmailConnections()
+
+  if (emailAddress) {
+    const target = emailAddress.toLowerCase()
+    const match = connections.find(
+      (connection) => connection.email.toLowerCase() === target,
+    )
+    if (match) {
+      return match
+    }
+  }
+
+  return connections.length === 1 ? connections[0] : null
 }
 
 function decodeBase64Url(value: string) {
@@ -235,12 +325,10 @@ function createEmailExpenseDedupeKey({
   ].join('|')
 }
 
-async function getGmailAccessToken(request?: Request) {
-  if (
-    gmailAccessTokenCache &&
-    gmailAccessTokenCache.expiresAt > Date.now() + 60_000
-  ) {
-    return gmailAccessTokenCache.accessToken
+async function getGmailAccessToken(refreshToken: string, request?: Request) {
+  const cached = gmailAccessTokenCache.get(refreshToken)
+  if (cached && cached.expiresAt > Date.now() + 60_000) {
+    return cached.accessToken
   }
 
   const response = await fetch('https://oauth2.googleapis.com/token', {
@@ -248,7 +336,7 @@ async function getGmailAccessToken(request?: Request) {
       client_id: getRequiredEnv('GMAIL_CLIENT_ID', request),
       client_secret: getRequiredEnv('GMAIL_CLIENT_SECRET', request),
       grant_type: 'refresh_token',
-      refresh_token: getRequiredEnv('GMAIL_REFRESH_TOKEN', request),
+      refresh_token: refreshToken,
     }),
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     method: 'POST',
@@ -256,7 +344,8 @@ async function getGmailAccessToken(request?: Request) {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '')
-    throw new Error(
+    throw new GmailApiError(
+      response.status,
       `Gmail token refresh failed: ${response.status} ${errorText}`,
     )
   }
@@ -270,20 +359,21 @@ async function getGmailAccessToken(request?: Request) {
     throw new Error('Gmail token refresh did not return an access token.')
   }
 
-  gmailAccessTokenCache = {
+  gmailAccessTokenCache.set(refreshToken, {
     accessToken: body.access_token,
     expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
-  }
+  })
 
   return body.access_token
 }
 
 async function gmailRequest<T>(
   path: string,
+  refreshToken: string,
   request?: Request,
   init?: RequestInit,
 ) {
-  const accessToken = await getGmailAccessToken(request)
+  const accessToken = await getGmailAccessToken(refreshToken, request)
   const response = await fetch(
     `https://gmail.googleapis.com/gmail/v1/${path}`,
     {
@@ -307,9 +397,14 @@ async function gmailRequest<T>(
   return (await response.json()) as T
 }
 
-async function getGmailMessage(id: string, request?: Request) {
+async function getGmailMessage(
+  id: string,
+  refreshToken: string,
+  request?: Request,
+) {
   return await gmailRequest<GmailMessage>(
     `users/me/messages/${encodeURIComponent(id)}?format=full`,
+    refreshToken,
     request,
   )
 }
@@ -319,7 +414,7 @@ async function saveGmailMessageExpense({
   message,
   ownerEmail,
 }: {
-  client: ConvexHttpClient
+  client: ReturnType<typeof createServerClient>
   message: GmailMessage
   ownerEmail: string
 }) {
@@ -379,6 +474,7 @@ async function saveGmailMessageExpense({
 
 async function listGmailMessages(
   query: string,
+  refreshToken: string,
   request?: Request,
   maxMessages = 100,
 ) {
@@ -399,7 +495,7 @@ async function listGmailMessages(
     const page = await gmailRequest<{
       messages?: Array<{ id?: string | null }>
       nextPageToken?: string
-    }>(url.pathname.slice(1) + url.search, request)
+    }>(url.pathname.slice(1) + url.search, refreshToken, request)
 
     messages.push(...(page.messages ?? []))
     if (messages.length >= maxMessages) {
@@ -416,16 +512,23 @@ async function syncGmailQuery({
   client,
   ownerEmail,
   query,
+  refreshToken,
   request,
   maxMessages,
 }: {
-  client: ConvexHttpClient
+  client: ReturnType<typeof createServerClient>
   ownerEmail: string
   query: string
+  refreshToken: string
   request: Request
   maxMessages?: number
 }) {
-  const messageRefs = await listGmailMessages(query, request, maxMessages)
+  const messageRefs = await listGmailMessages(
+    query,
+    refreshToken,
+    request,
+    maxMessages,
+  )
   let saved = 0
   let skipped = 0
 
@@ -437,7 +540,7 @@ async function syncGmailQuery({
 
     const result = await saveGmailMessageExpense({
       client,
-      message: await getGmailMessage(item.id, request),
+      message: await getGmailMessage(item.id, refreshToken, request),
       ownerEmail,
     })
 
@@ -481,8 +584,7 @@ export async function handleGmailSync(request: Request) {
       )
     }
 
-    const secret = getRuntimeEnv('GMAIL_SYNC_SECRET', request)
-    if (secret && request.headers.get('authorization') !== `Bearer ${secret}`) {
+    if (!isAuthorizedCronRequest(request)) {
       return jsonResponse({ error: 'Unauthorized.' }, { status: 401 })
     }
 
@@ -490,24 +592,68 @@ export async function handleGmailSync(request: Request) {
       string,
       unknown
     >
-    const ownerEmail = getOwnerEmail(request)
-    if (!ownerEmail) {
-      return jsonResponse(
-        { error: 'OWNER_EMAIL is not configured.' },
-        { status: 501 },
-      )
-    }
-
     const query =
       typeof body.query === 'string' && body.query
         ? body.query
         : (getRuntimeEnv('GMAIL_QUERY', request) ?? DEFAULT_BANK_QUERY)
-    const client = getConvexClient(request)
-    const result = await syncGmailQuery({ client, ownerEmail, query, request })
 
-    return jsonResponse({ ok: true, query, ...result })
+    return jsonResponse({
+      ok: true,
+      query,
+      ...(await syncAllConnections({ query, request })),
+    })
   } catch (error) {
     return errorJsonResponse(error)
+  }
+}
+
+/**
+ * Migrates the legacy single-owner token (Worker secret) into a per-user
+ * connection the first time the cron runs, so existing installs keep working
+ * after the "Connect Gmail" flow was introduced.
+ */
+async function migrateLegacyOwnerToken(): Promise<void> {
+  try {
+    const legacyRefreshToken =
+      getRuntimeEnv('GMAIL_REFRESH_TOKEN') ??
+      getRuntimeEnv('GOOGLE_REFRESH_TOKEN')
+    const ownerEmail = getRuntimeEnv('OWNER_EMAIL')?.toLowerCase()
+
+    if (!legacyRefreshToken || !ownerEmail) {
+      return
+    }
+
+    if (await getGmailConnectionByEmail(ownerEmail)) {
+      return
+    }
+
+    const user = await findUserByEmail(ownerEmail)
+    if (!user) {
+      return
+    }
+
+    await upsertGmailConnection({
+      userId: user.id,
+      email: ownerEmail,
+      refreshToken: legacyRefreshToken,
+      scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    })
+
+    console.info(
+      JSON.stringify({
+        level: 'info',
+        event: 'gmail.connection.legacy_migrated',
+        email: ownerEmail,
+      }),
+    )
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        event: 'gmail.connection.legacy_migration_failed',
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
   }
 }
 
@@ -524,27 +670,17 @@ export async function handleGmailPoll(request: Request) {
       )
     }
 
-    const secret = getRuntimeEnv('GMAIL_SYNC_SECRET', request)
-    if (secret && request.headers.get('authorization') !== `Bearer ${secret}`) {
+    if (!isAuthorizedCronRequest(request)) {
       return jsonResponse({ error: 'Unauthorized.' }, { status: 401 })
     }
 
-    const ownerEmail = getOwnerEmail(request)
-    if (!ownerEmail) {
-      return jsonResponse(
-        { error: 'OWNER_EMAIL is not configured.' },
-        { status: 501 },
-      )
-    }
+    await migrateLegacyOwnerToken()
 
-    const client = getConvexClient(request)
     const query = getRecentBankQuery(request)
-    const result = await syncGmailQuery({
-      client,
-      maxMessages: getPollMaxMessages(request),
-      ownerEmail,
+    const result = await syncAllConnections({
       query,
       request,
+      maxMessages: getPollMaxMessages(request),
     })
 
     return jsonResponse({ fallback: true, ok: true, query, ...result })
@@ -566,48 +702,59 @@ export async function handleGmailWatch(request: Request) {
       )
     }
 
-    const secret = getRuntimeEnv('GMAIL_SYNC_SECRET', request)
-    if (secret && request.headers.get('authorization') !== `Bearer ${secret}`) {
+    if (!isAuthorizedCronRequest(request)) {
       return jsonResponse({ error: 'Unauthorized.' }, { status: 401 })
     }
 
-    const ownerEmail = getOwnerEmail(request)
-    if (!ownerEmail) {
-      return jsonResponse(
-        { error: 'OWNER_EMAIL is not configured.' },
-        { status: 501 },
-      )
+    const connections = await listGmailConnections()
+    const renewed: string[] = []
+
+    for (const connection of connections) {
+      try {
+        const response = await gmailRequest<{
+          historyId?: string
+          expiration?: string
+        }>('users/me/watch', connection.refreshToken, request, {
+          body: JSON.stringify({
+            topicName: getRequiredEnv('GMAIL_PUBSUB_TOPIC', request),
+          }),
+          method: 'POST',
+        })
+
+        await upsertGmailSyncState({
+          userEmail: connection.email,
+          historyId: response.historyId,
+          watchExpiration: response.expiration
+            ? Number(response.expiration)
+            : undefined,
+        })
+        renewed.push(connection.email)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await markGmailConnectionError(connection.userId, message)
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            event: 'gmail.watch.failed',
+            email: connection.email,
+            error: message,
+          }),
+        )
+      }
     }
 
-    const response = await gmailRequest<{
-      historyId?: string
-      expiration?: string
-    }>('users/me/watch', request, {
-      body: JSON.stringify({
-        topicName: getRequiredEnv('GMAIL_PUBSUB_TOPIC', request),
-      }),
-      method: 'POST',
-    })
-
-    const client = getConvexClient(request)
-    await client.mutation(api.gmailSync.upsertState, {
-      historyId: response.historyId,
-      userEmail: ownerEmail,
-      watchExpiration: response.expiration
-        ? Number(response.expiration)
-        : undefined,
-    })
-
-    return jsonResponse({ ok: true, ...response })
+    return jsonResponse({ ok: true, renewed })
   } catch (error) {
     return errorJsonResponse(error)
   }
 }
 
 async function listHistoryMessageIds({
+  refreshToken,
   request,
   startHistoryId,
 }: {
+  refreshToken: string
   request: Request
   startHistoryId: string
 }) {
@@ -625,7 +772,7 @@ async function listHistoryMessageIds({
     const page = await gmailRequest<{
       history?: GmailHistoryEntry[]
       nextPageToken?: string
-    }>(url.pathname.slice(1) + url.search, request)
+    }>(url.pathname.slice(1) + url.search, refreshToken, request)
 
     for (const entry of page.history ?? []) {
       for (const added of entry.messagesAdded ?? []) {
@@ -688,23 +835,34 @@ export async function handleGmailPubSubWebhook(request: Request) {
       .json()
       .catch(() => null)) as PubSubPushBody | null
     const notification = decodePubSubData(body?.message?.data)
-    const ownerEmail = getOwnerEmail(request, notification?.emailAddress)
     const notificationHistoryId =
       notification?.historyId === undefined || notification.historyId === null
         ? undefined
         : String(notification.historyId)
 
-    if (!ownerEmail || !notificationHistoryId) {
+    if (!notificationHistoryId) {
       return jsonResponse(
         { error: 'Invalid Gmail Pub/Sub notification.' },
         { status: 400 },
       )
     }
 
-    const client = getConvexClient(request)
-    const state = await client.query(api.gmailSync.getState, {
-      userEmail: ownerEmail,
-    })
+    // Resolve the account from the notification or fall back to the only
+    // connection when the topic carries no email address.
+    const connection = await findConnectionForNotification(
+      notification?.emailAddress,
+    )
+
+    if (!connection) {
+      return jsonResponse(
+        { error: 'No Gmail connection matches this notification.' },
+        { status: 404 },
+      )
+    }
+
+    const client = getServerClient(request)
+    const ownerEmail = connection.email
+    const state = await getGmailSyncState(ownerEmail)
 
     if (!state?.historyId) {
       const fallback = await syncGmailQuery({
@@ -712,13 +870,15 @@ export async function handleGmailPubSubWebhook(request: Request) {
         maxMessages: getPollMaxMessages(request),
         ownerEmail,
         query: getRecentBankQuery(request),
+        refreshToken: connection.refreshToken,
         request,
       })
 
-      await client.mutation(api.gmailSync.upsertState, {
+      await upsertGmailSyncState({
         historyId: notificationHistoryId,
         userEmail: ownerEmail,
       })
+      await markGmailConnectionSynced(connection.userId, Date.now())
 
       return jsonResponse({
         ok: true,
@@ -748,6 +908,7 @@ export async function handleGmailPubSubWebhook(request: Request) {
 
     try {
       messageIds = await listHistoryMessageIds({
+        refreshToken: connection.refreshToken,
         request,
         startHistoryId: state.historyId,
       })
@@ -762,6 +923,7 @@ export async function handleGmailPubSubWebhook(request: Request) {
         maxMessages: getPollMaxMessages(request),
         ownerEmail,
         query: getRecentBankQuery(request),
+        refreshToken: connection.refreshToken,
         request,
       })
     }
@@ -772,7 +934,11 @@ export async function handleGmailPubSubWebhook(request: Request) {
       try {
         const result = await saveGmailMessageExpense({
           client,
-          message: await getGmailMessage(messageId, request),
+          message: await getGmailMessage(
+            messageId,
+            connection.refreshToken,
+            request,
+          ),
           ownerEmail,
         })
 
@@ -791,10 +957,11 @@ export async function handleGmailPubSubWebhook(request: Request) {
       }
     }
 
-    await client.mutation(api.gmailSync.upsertState, {
+    await upsertGmailSyncState({
       historyId: notificationHistoryId,
       userEmail: ownerEmail,
     })
+    await markGmailConnectionSynced(connection.userId, Date.now())
 
     return jsonResponse({
       ok: true,

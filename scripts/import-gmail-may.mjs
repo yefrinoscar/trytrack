@@ -4,10 +4,9 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import process from 'node:process'
-import { ConvexHttpClient } from 'convex/browser'
 import { google } from 'googleapis'
-import { api } from '../convex/_generated/api.js'
 import { parseEmailExpense } from '../src/lib/email-expense-parser.ts'
+import { importFromEmail } from '../src/server/api/expenses.ts'
 
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 const CREDENTIALS_PATH =
@@ -237,11 +236,6 @@ async function main() {
   loadEnvFile('.env.local')
   loadEnvFile('.env')
 
-  const convexUrl = process.env.VITE_CONVEX_URL ?? process.env.CONVEX_URL
-  if (!convexUrl) {
-    throw new Error('Set VITE_CONVEX_URL or CONVEX_URL in .env/.env.local.')
-  }
-
   const auth = await getOAuthClient()
   const gmail = google.gmail({ auth, version: 'v1' })
   const profile = await gmail.users.getProfile({ userId: 'me' })
@@ -261,7 +255,7 @@ async function main() {
   console.log(`Owner email: ${ownerEmail}`)
   console.log(`Spent-at range: ${spentAtStart} to ${spentAtEnd}`)
 
-  const client = new ConvexHttpClient(convexUrl)
+  const client = { mutation: (_fn, args) => importFromEmail(args) }
   const messages = await listMessages(gmail, query)
   let parsedCount = 0
   let savedCount = 0
@@ -314,7 +308,7 @@ async function main() {
       source: parsed.source,
       spentAt: parsed.spentAt,
     })
-    await client.mutation(api.expenses.importFromEmail, {
+    await client.mutation(null, {
       amount: parsed.amount,
       currency: parsed.currency,
       dedupeKey,

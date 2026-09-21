@@ -7,6 +7,7 @@ import { AVAILABLE_CURRENCIES } from '@/lib/finance'
 import { formatCurrency } from '@/lib/finance'
 import type { DashboardData } from '@/lib/finance'
 import { cn } from '@/lib/utils'
+import { GmailConnectionCard } from './gmail-connection-card'
 
 export function SettingsPage() {
   return (
@@ -24,6 +25,10 @@ function SettingsView({
   actions: FinanceActions
 }) {
   const previewAmount = data.debts[0]?.balance ?? 12850.45
+  const gmailResult =
+    typeof window === 'undefined'
+      ? undefined
+      : (new URLSearchParams(window.location.search).get('gmail') ?? undefined)
 
   return (
     <main className="page-wrap px-4 pb-16">
@@ -36,6 +41,13 @@ function SettingsView({
       </section>
 
       <section className="divide-y divide-border">
+        <SettingsSection
+          description="Automatically import expenses from bank notification emails."
+          label="Email import"
+        >
+          <GmailConnectionCard result={gmailResult} />
+        </SettingsSection>
+
         <SettingsSection
           description="Choose how the workspace should look."
           label="Theme"

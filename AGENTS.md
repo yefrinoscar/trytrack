@@ -75,12 +75,17 @@ These commands map to their corresponding tools. For example, `vp dev --port 300
 - [ ] Run `vp check` and `vp test` to validate changes.
 <!--VITE PLUS END-->
 
-<!-- convex-ai-start -->
+<!-- cloudflare-ai-start -->
 
-This project uses [Convex](https://convex.dev) as its backend.
+This project runs on **Cloudflare Workers** with **Cloudflare D1** (SQLite) via
+**Drizzle ORM**. Better Auth handles authentication inside the Worker.
 
-When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+- Read `docs/architecture.md` before changing backend or auth code.
+- Data functions live in `src/server/api/*.ts`; the client reaches them through
+  `src/lib/api-paths.ts` + `useApi()`.
+- Schema changes: edit `src/server/db/schema.ts`, then `vp run db:generate` and
+  `vp run db:migrate:local` / `vp run db:migrate:remote`.
+- Never import `better-sqlite3` statically (it is a native Node addon and would
+  break the Worker bundle).
 
-Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
-
-<!-- convex-ai-end -->
+<!-- cloudflare-ai-end -->

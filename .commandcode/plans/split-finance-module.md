@@ -7,7 +7,7 @@ Break 1,897-line monolith into focused modules. Zero import changes for 24 consu
 ## New Files (5)
 
 1. `src/lib/finance-types.ts` (~315 lines) — types, constants, seed data, normalizeCurrencyCode
-2. `src/lib/finance-data.ts` (~300 lines) — localStorage, Convex bridge
+2. `src/lib/finance-data.ts` (~300 lines) — localStorage + server data bridge
 3. `src/lib/finance-logic.ts` (~335 lines) — business computations
 4. `src/lib/finance-formatters.ts` (~110 lines) — formatCurrency, formatDate, etc.
 5. `src/lib/finance-hooks.ts` (~500 lines) — useFinanceDashboard, useFinanceActions
