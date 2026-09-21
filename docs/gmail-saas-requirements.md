@@ -51,3 +51,20 @@ a service where other users can connect their own Google account.
 - Before opening this to other users, the owner-only environment variables must
   become per-user OAuth records in D1 (`gmail_sync_states` is already keyed by
   email; tokens still live in Worker secrets).
+
+## Troubleshooting: no expenses imported
+
+Run the diagnostic, which checks the token, the account and the matching emails
+without touching the database:
+
+```bash
+GMAIL_CLIENT_ID=... GMAIL_CLIENT_SECRET=... GMAIL_REFRESH_TOKEN=... \
+  node scripts/check-gmail.mjs --days 7
+```
+
+The most common failure is a **expired refresh token**:
+
+- If the Google Cloud OAuth client is still in **"Testing"** publishing status,
+  refresh tokens expire after **7 days** (`invalid_grant`).
+- Fix: re-authorize and upload the new token, or publish the OAuth consent
+  screen to "In production" so tokens stop expiring on a weekly basis.

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vite-plus/test'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -10,8 +10,15 @@ import { join } from 'node:path'
  * exercises the queries and mutations that back the app.
  *
  * Runs sequentially because it points `getDb()` at a temp LOCAL_DB_PATH.
+ * `getSession` is mocked so the authorization guards see a signed-in owner.
  */
 let dir: string
+
+const mockSession = vi.fn()
+
+vi.mock('#/server/auth', () => ({
+  getSession: () => mockSession(),
+}))
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'trytrack-db-'))
@@ -38,6 +45,9 @@ describe('local D1 data layer', () => {
     const debtApi = await import('#/server/api/debts')
 
     const db = await getDb()
+    mockSession.mockResolvedValue({
+      user: { id: 'u1', email: 'u1@test.local' },
+    })
     await db.insert(users).values({
       id: 'u1',
       email: 'u1@test.local',

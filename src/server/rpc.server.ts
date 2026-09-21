@@ -1,6 +1,5 @@
 import * as debts from './api/debts'
 import * as expenses from './api/expenses'
-import * as gmailSync from './api/gmailSync'
 import * as monthlySpend from './api/monthlySpend'
 import * as recurringPayments from './api/recurringPayments'
 import * as users from './api/users'
@@ -35,7 +34,9 @@ const handlers: Record<string, Handler> = {
   'expenses.create': expenses.create,
   'expenses.update': expenses.update,
   'expenses.remove': expenses.remove,
-  'expenses.importFromEmail': expenses.importFromEmail,
+  // NOTE: expenses.importFromEmail is intentionally NOT exposed over RPC. It is
+  // only called by the Gmail/Resend webhooks (no user session) and would
+  // otherwise let any signed-in account inject rows for another email address.
   'expenses.listPendingEmailImports': expenses.listPendingEmailImports,
   'expenses.updateEmailImportCategory': expenses.updateEmailImportCategory,
   'expenses.confirmEmailImport': expenses.confirmEmailImport,
@@ -43,8 +44,9 @@ const handlers: Record<string, Handler> = {
 
   'monthlySpend.getMonthlySpendSummary': monthlySpend.getMonthlySpendSummary,
 
-  'gmailSync.getState': gmailSync.getState,
-  'gmailSync.upsertState': gmailSync.upsertState,
+  // NOTE: gmailSync.* is intentionally NOT exposed over RPC. It is only called
+  // server-side by the Gmail/Resend webhooks and the scheduled cron, which run
+  // without a user session. Client code never reads or writes sync state.
 }
 
 export type RpcInput = {

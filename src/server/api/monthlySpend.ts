@@ -2,6 +2,7 @@ import { and, eq, gte, lte } from 'drizzle-orm'
 import { getDb } from '../db/client'
 import { debts, expenses, recurringPayments } from '../db/schema'
 import { toDoc } from '../db/serialize'
+import { requireOwnUserId } from './authz'
 
 function getMonthRange(month: string) {
   const [yearText, monthText] = month.split('-')
@@ -58,6 +59,8 @@ export async function getMonthlySpendSummary(args: {
   month: string
   currency?: string
 }) {
+  await requireOwnUserId(args.userId)
+
   const db = await getDb()
   const { startDate, endDate } = getMonthRange(args.month)
 

@@ -3,12 +3,15 @@ import { getDb } from '../db/client'
 import { recurringPayments } from '../db/schema'
 import { newId } from '../db/ids'
 import { toDoc } from '../db/serialize'
+import { requireOwnRecord, requireOwnUserId } from './authz'
 import type { InferSelectModel } from 'drizzle-orm'
 
 type RecurringStatus = 'active' | 'paused' | 'cancelled'
 type RecurringRow = InferSelectModel<typeof recurringPayments>
 
 export async function listByUser(args: { userId: string }) {
+  await requireOwnUserId(args.userId)
+
   const db = await getDb()
   const rows = await db
     .select()
@@ -30,6 +33,8 @@ export async function create(args: {
   endDate?: string
   status?: RecurringStatus
 }) {
+  await requireOwnUserId(args.userId)
+
   const db = await getDb()
   const now = Date.now()
   const id = newId()
@@ -62,6 +67,8 @@ export async function update(args: {
   endDate?: string
   status?: RecurringStatus
 }) {
+  await requireOwnRecord('recurringPayments', args.id)
+
   const db = await getDb()
   const { id, ...value } = args
   const updates: Partial<RecurringRow> = {
@@ -75,6 +82,8 @@ export async function update(args: {
 }
 
 export async function remove(args: { id: string }) {
+  await requireOwnRecord('recurringPayments', args.id)
+
   const db = await getDb()
   await db.delete(recurringPayments).where(eq(recurringPayments.id, args.id))
 }

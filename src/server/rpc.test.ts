@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'vite-plus/test'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vite-plus/test'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -6,9 +6,16 @@ import { join } from 'node:path'
 
 /**
  * Verifies the RPC dispatcher (`runRpc`) that backs `useApi().query/mutation` —
- * the path every client call goes through.
+ * the path every client call goes through. `getSession` is mocked so the
+ * authorization guards see a signed-in owner.
  */
 let dir: string
+
+const mockSession = vi.fn()
+
+vi.mock('#/server/auth', () => ({
+  getSession: () => mockSession(),
+}))
 
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'trytrack-rpc-'))
@@ -41,6 +48,9 @@ describe('rpc dispatcher', () => {
     const { users } = await import('#/server/db/schema')
 
     const db = await getDb()
+    mockSession.mockResolvedValue({
+      user: { id: 'rpc-user', email: 'rpc@test.local' },
+    })
     await db.insert(users).values({
       id: 'rpc-user',
       email: 'rpc@test.local',

@@ -3,6 +3,7 @@ import { getDb } from '../db/client'
 import { debtPayments, debtPlans, debts } from '../db/schema'
 import { newId } from '../db/ids'
 import { toDoc } from '../db/serialize'
+import { requireOwnDebt, requireOwnDebts, requireOwnUserId } from './authz'
 import type { InferSelectModel } from 'drizzle-orm'
 
 type DebtRow = InferSelectModel<typeof debts>
@@ -290,6 +291,8 @@ function buildInstallmentOverview(
 }
 
 export async function listByUser(args: { userId: string }) {
+  await requireOwnUserId(args.userId)
+
   const db = await getDb()
   const rows = await db
     .select()
@@ -304,6 +307,8 @@ export async function getInstallmentOverview(args: { debtIds: string[] }) {
   if (!args.debtIds.length) {
     return []
   }
+
+  await requireOwnDebts(args.debtIds)
 
   const db = await getDb()
   const debtIdSet = new Set(args.debtIds)
@@ -339,6 +344,8 @@ export async function create(args: {
   currentPlanVersion?: number
   status?: 'active' | 'closed'
 }) {
+  await requireOwnUserId(args.userId)
+
   const db = await getDb()
   const now = Date.now()
   const payments = normalizeInstallments(args.payments)
@@ -412,6 +419,8 @@ export async function update(args: {
   currentPlanVersion?: number
   status?: 'active' | 'closed'
 }) {
+  await requireOwnDebt(args.id)
+
   const db = await getDb()
   const { id, dueDate, dueDay, payments: nextPaymentsInput, ...value } = args
   const [existing] = await db
@@ -506,6 +515,8 @@ export async function payNextInstallment(args: {
   paidAt?: string
   requestId: string
 }) {
+  await requireOwnDebt(args.debtId)
+
   const db = await getDb()
   const [existingPayment] = await db
     .select()
@@ -628,6 +639,8 @@ export async function restructureInstallments(args: {
   debtId: string
   payments: number
 }) {
+  await requireOwnDebt(args.debtId)
+
   const db = await getDb()
   const [debt] = await db
     .select()
@@ -692,6 +705,8 @@ export async function payCustomAmount(args: {
   paidAt?: string
   requestId: string
 }) {
+  await requireOwnDebt(args.debtId)
+
   const db = await getDb()
   const [debt] = await db
     .select()
@@ -825,6 +840,8 @@ export async function updateInstallmentAmount(args: {
   debtId: string
   installmentAmount: number
 }) {
+  await requireOwnDebt(args.debtId)
+
   const db = await getDb()
   const [debt] = await db
     .select()
@@ -876,6 +893,8 @@ export async function undoLastPayment(args: {
   debtId: string
   paymentId: string
 }) {
+  await requireOwnDebt(args.debtId)
+
   const db = await getDb()
   const [debt] = await db
     .select()
@@ -966,6 +985,8 @@ export async function undoLastPayment(args: {
 }
 
 export async function remove(args: { id: string }) {
+  await requireOwnDebt(args.id)
+
   const db = await getDb()
   await db.delete(debtPayments).where(eq(debtPayments.debtId, args.id))
   await db.delete(debtPlans).where(eq(debtPlans.debtId, args.id))

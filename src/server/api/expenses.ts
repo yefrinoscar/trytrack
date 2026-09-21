@@ -3,7 +3,12 @@ import { getDb } from '../db/client'
 import { emailExpenseImports, expenses, users } from '../db/schema'
 import { newId } from '../db/ids'
 import { toDoc } from '../db/serialize'
-import { resolveSessionUser } from './users'
+import {
+  requireAppUser,
+  requireOwnRecord,
+  requireOwnUserId,
+  getSessionEmail,
+} from './authz'
 import type { InferSelectModel } from 'drizzle-orm'
 
 type EmailImportRow = InferSelectModel<typeof emailExpenseImports>
@@ -77,10 +82,7 @@ function fingerprintOfRow(row: EmailImportRow) {
 }
 
 async function requireImportForUser(id: string, statusGuard?: string) {
-  const appUser = await resolveSessionUser()
-  if (!appUser) {
-    throw new Error('Unauthenticated')
-  }
+  const appUser = await requireAppUser()
 
   const db = await getDb()
   const [row] = await db
@@ -105,6 +107,8 @@ async function requireImportForUser(id: string, statusGuard?: string) {
 }
 
 export async function listByUser(args: { userId: string }) {
+  await requireOwnUserId(args.userId)
+
   const db = await getDb()
   const rows = await db
     .select()
@@ -120,6 +124,8 @@ export async function listByDateRange(args: {
   startDate: string
   endDate: string
 }) {
+  await requireOwnUserId(args.userId)
+
   const db = await getDb()
   const rows = await db
     .select()
@@ -144,6 +150,8 @@ export async function create(args: {
   merchant?: string
   spentAt: string
 }) {
+  await requireOwnUserId(args.userId)
+
   const db = await getDb()
   const now = Date.now()
   const id = newId()
@@ -171,6 +179,8 @@ export async function update(args: {
   merchant?: string
   spentAt?: string
 }) {
+  await requireOwnRecord('expenses', args.id)
+
   const db = await getDb()
   const { id, ...value } = args
   const updates: Partial<ExpenseRow> = { ...value, updatedAt: Date.now() }
@@ -178,6 +188,8 @@ export async function update(args: {
 }
 
 export async function remove(args: { id: string }) {
+  await requireOwnRecord('expenses', args.id)
+
   const db = await getDb()
   await db.delete(expenses).where(eq(expenses.id, args.id))
 }
@@ -310,10 +322,12 @@ export async function importFromEmail(args: {
 }
 
 export async function listPendingEmailImports() {
-  const appUser = await resolveSessionUser()
-  if (!appUser) {
+  const email = await getSessionEmail()
+  if (!email) {
     return []
   }
+
+  const appUser = await requireAppUser()
 
   const db = await getDb()
   const rows = (
@@ -499,10 +513,7 @@ export async function confirmEmailImport(args: {
 }
 
 export async function dismissEmailImport(args: { id: string }) {
-  const appUser = await resolveSessionUser()
-  if (!appUser) {
-    throw new Error('Unauthenticated')
-  }
+  const appUser = await requireOwnRecord('emailExpenseImports', args.id)
 
   const db = await getDb()
   const [row] = await db

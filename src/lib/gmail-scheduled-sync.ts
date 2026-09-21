@@ -45,15 +45,47 @@ function createScheduledGmailRequest(path: string, env: CloudflareEnv) {
 }
 
 async function logScheduledResponse(label: string, response: Response) {
-  if (response.ok) {
+  const body = await response.text().catch(() => '')
+
+  if (!response.ok) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        event: `gmail.scheduled.${label}_failed`,
+        status: response.status,
+        body: body.slice(0, 1000),
+      }),
+    )
     return
   }
 
-  const body = await response.text().catch(() => '')
-  console.error(`Gmail scheduled ${label} failed`, {
-    body: body.slice(0, 500),
-    status: response.status,
-  })
+  // A 200 can still mean "the sync could not run" (for example the Gmail
+  // refresh token expired). Surface it so failures are not silent.
+  let parsed: { ok?: boolean; error?: string; saved?: number } | null = null
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    parsed = null
+  }
+
+  if (parsed?.error) {
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        event: `gmail.scheduled.${label}_error`,
+        error: parsed.error,
+      }),
+    )
+    return
+  }
+
+  console.log(
+    JSON.stringify({
+      level: 'info',
+      event: `gmail.scheduled.${label}_ok`,
+      saved: parsed?.saved ?? null,
+    }),
+  )
 }
 
 export default definePlugin((nitroApp) => {
