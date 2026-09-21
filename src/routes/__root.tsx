@@ -82,7 +82,13 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     const auth = await getAuth()
     const isAuthenticated = auth.isAuthenticated
 
-    const publicRoutes = ['/login', '/forgot-password', '/reset-password']
+    const publicRoutes = [
+      '/login',
+      '/forgot-password',
+      '/reset-password',
+      '/privacy',
+      '/terms',
+    ]
     const isPublicRoute = publicRoutes.includes(pathname)
 
     if (isPublicRoute) {

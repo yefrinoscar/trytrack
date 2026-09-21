@@ -9,8 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as InvestmentsRouteImport } from './routes/investments'
 import { Route as IncomesRouteImport } from './routes/incomes'
@@ -28,6 +30,11 @@ import { Route as ApiEmailGmailPollRouteImport } from './routes/api/email/gmail/
 import { Route as ApiEmailGmailConnectRouteImport } from './routes/api/email/gmail/connect'
 import { Route as ApiEmailGmailCallbackRouteImport } from './routes/api/email/gmail/callback'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -36,6 +43,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -127,8 +139,10 @@ export interface FileRoutesByFullPath {
   '/incomes': typeof IncomesRoute
   '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
@@ -147,8 +161,10 @@ export interface FileRoutesByTo {
   '/incomes': typeof IncomesRoute
   '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
@@ -168,8 +184,10 @@ export interface FileRoutesById {
   '/incomes': typeof IncomesRoute
   '/investments': typeof InvestmentsRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/settings': typeof SettingsRoute
+  '/terms': typeof TermsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
@@ -190,8 +208,10 @@ export interface FileRouteTypes {
     | '/incomes'
     | '/investments'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/settings'
+    | '/terms'
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
@@ -210,8 +230,10 @@ export interface FileRouteTypes {
     | '/incomes'
     | '/investments'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/settings'
+    | '/terms'
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
@@ -230,8 +252,10 @@ export interface FileRouteTypes {
     | '/incomes'
     | '/investments'
     | '/login'
+    | '/privacy'
     | '/reset-password'
     | '/settings'
+    | '/terms'
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
@@ -251,8 +275,10 @@ export interface RootRouteChildren {
   IncomesRoute: typeof IncomesRoute
   InvestmentsRoute: typeof InvestmentsRoute
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SettingsRoute: typeof SettingsRoute
+  TermsRoute: typeof TermsRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiEmailBackfillRoute: typeof ApiEmailBackfillRoute
   ApiEmailInboundRoute: typeof ApiEmailInboundRoute
@@ -266,6 +292,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -278,6 +311,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -403,8 +443,10 @@ const rootRouteChildren: RootRouteChildren = {
   IncomesRoute: IncomesRoute,
   InvestmentsRoute: InvestmentsRoute,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SettingsRoute: SettingsRoute,
+  TermsRoute: TermsRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiEmailBackfillRoute: ApiEmailBackfillRoute,
   ApiEmailInboundRoute: ApiEmailInboundRoute,
