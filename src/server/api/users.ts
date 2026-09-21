@@ -29,6 +29,24 @@ export async function findUserByEmail(email: string) {
   return await findByEmail(email.toLowerCase())
 }
 
+/**
+ * Returns the app profile for the current session, creating it on first use.
+ *
+ * Sign-up only creates the Better Auth user, so a freshly registered account
+ * has no `users` row until the dashboard loads. Callers that must work
+ * regardless of render order (for example the Gmail OAuth start endpoint) use
+ * this instead of `resolveSessionUser`.
+ */
+export async function ensureSessionUser() {
+  const session = await getSession()
+  const email = session?.user?.email
+  if (!email) {
+    return null
+  }
+
+  return await ensureCurrent({ currency: undefined })
+}
+
 export async function getByEmail(args: { email: string }) {
   const email = await requireSessionEmail()
   if (email !== args.email) {

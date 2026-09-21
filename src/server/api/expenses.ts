@@ -9,6 +9,7 @@ import {
   requireOwnUserId,
   getSessionEmail,
 } from './authz'
+import { findUserByEmail } from './users'
 import type { InferSelectModel } from 'drizzle-orm'
 
 type EmailImportRow = InferSelectModel<typeof emailExpenseImports>
@@ -327,7 +328,12 @@ export async function listPendingEmailImports() {
     return []
   }
 
-  const appUser = await requireAppUser()
+  // A freshly registered account may not have its app profile yet; treat that
+  // as "nothing pending" instead of failing the page that renders the count.
+  const appUser = await findUserByEmail(email)
+  if (!appUser) {
+    return []
+  }
 
   const db = await getDb()
   const rows = (
