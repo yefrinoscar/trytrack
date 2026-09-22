@@ -1,5 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { createForUser } from '#/server/api/expenses'
+import {
+  createForUser,
+  removeByIdForApi,
+  removeMatchingForApi,
+} from '#/server/api/expenses'
 import { findUserByEmail } from '#/server/api/users'
 import { getEnv } from '#/server/env'
 
@@ -145,9 +149,90 @@ export async function handleCreateExpense(request: Request) {
   return json({ ok: true, id }, 201)
 }
 
+/**
+ * Deletes expenses. Same key as the create endpoint.
+ *
+ *   DELETE /api/v1/expenses?id=<expenseId>
+ *   DELETE /api/v1/expenses?email=you@example.com&spentAt=2026-09-22
+ *   DELETE /api/v1/expenses?email=you@example.com&category=Other
+ *
+ * Deleting by `id` removes a single expense. Deleting by `email` requires at
+ * least one more filter, so a typo cannot wipe every expense by accident.
+ */
+export async function handleDeleteExpense(request: Request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204 })
+  }
+
+  if (!getEnv('EXPENSES_API_KEY')) {
+    return json(
+      {
+        error:
+          'The expense API is disabled: EXPENSES_API_KEY is not configured.',
+      },
+      503,
+    )
+  }
+
+  if (!isAuthorized(request)) {
+    return json({ error: 'Unauthorized.' }, 401)
+  }
+
+  const params = new URL(request.url).searchParams
+  const id = asTrimmedString(params.get('id'))
+  const email = asTrimmedString(params.get('email')).toLowerCase()
+  const spentAt = asTrimmedString(params.get('spentAt'))
+  const category = asTrimmedString(params.get('category'))
+  const currency = asTrimmedString(params.get('currency'))
+  const description = asTrimmedString(params.get('description'))
+
+  if (id) {
+    const deleted = await removeByIdForApi(id)
+    if (!deleted) {
+      return json({ error: `No expense found with id ${id}.` }, 404)
+    }
+    return json({ ok: true, deleted: 1 })
+  }
+
+  if (!email) {
+    return json(
+      {
+        error: 'Provide ?id= to delete one expense, or ?email= plus a filter.',
+      },
+      422,
+    )
+  }
+
+  if (!spentAt && !category && !currency && !description) {
+    return json(
+      {
+        error:
+          'Deleting by email needs at least one filter: spentAt, category, currency or description.',
+      },
+      422,
+    )
+  }
+
+  const user = await findUserByEmail(email)
+  if (!user) {
+    return json({ error: `No account found for ${email}.` }, 404)
+  }
+
+  const deleted = await removeMatchingForApi({
+    userId: user.id,
+    ...(spentAt ? { spentAt } : {}),
+    ...(category ? { category } : {}),
+    ...(currency ? { currency } : {}),
+    ...(description ? { description } : {}),
+  })
+
+  return json({ ok: true, deleted })
+}
+
 export const Route = createFileRoute('/api/v1/expenses')({
   server: {
     handlers: {
+      DELETE: ({ request }) => handleDeleteExpense(request),
       OPTIONS: ({ request }) => handleCreateExpense(request),
       POST: ({ request }) => handleCreateExpense(request),
     },

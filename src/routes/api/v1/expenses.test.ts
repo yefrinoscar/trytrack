@@ -10,6 +10,7 @@ import { join } from 'node:path'
  */
 let dir: string
 let handle: (request: Request) => Promise<Response>
+let handleDelete: (request: Request) => Promise<Response>
 
 const KEY = 'test-api-key-1234567890'
 
@@ -43,6 +44,7 @@ beforeAll(async () => {
   })
 
   handle = (await import('#/routes/api/v1/expenses')).handleCreateExpense
+  handleDelete = (await import('#/routes/api/v1/expenses')).handleDeleteExpense
 })
 
 afterAll(() => {
@@ -59,6 +61,15 @@ function post(body: unknown, key = KEY) {
         ...(key ? { authorization: `Bearer ${key}` } : {}),
       },
       body: JSON.stringify(body),
+    }),
+  )
+}
+
+function del(query: string, key = KEY) {
+  return handleDelete(
+    new Request(`https://trytrack.test/api/v1/expenses${query}`, {
+      method: 'DELETE',
+      headers: key ? { authorization: `Bearer ${key}` } : {},
     }),
   )
 }
@@ -157,5 +168,61 @@ describe('public expense API', () => {
     expect(created?.currency).toBe('PEN')
     expect(created?.category).toBe('API')
     expect(created?.merchant).toBe('Cafe')
+  })
+})
+
+describe('public expense API · delete', () => {
+  test('rejects a missing or wrong key', async () => {
+    expect((await del('?id=x', '')).status).toBe(401)
+    expect((await del('?id=x', 'wrong-key-000000000000')).status).toBe(401)
+  })
+
+  test('requires an id or an email', async () => {
+    const res = await del('')
+    expect(res.status).toBe(422)
+  })
+
+  test('deleting by email needs a filter', async () => {
+    const res = await del('?email=api@test.local')
+    expect(res.status).toBe(422)
+  })
+
+  test('returns 404 for an unknown id and unknown account', async () => {
+    expect((await del('?id=does-not-exist')).status).toBe(404)
+    expect(
+      (await del('?email=nobody@test.local&spentAt=2026-09-22')).status,
+    ).toBe(404)
+  })
+
+  test('deletes a single expense by id', async () => {
+    const created = (await (await post(valid)).json()) as { id: string }
+
+    const res = await del(`?id=${created.id}`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, deleted: 1 })
+
+    const { getDb } = await import('#/server/db/client')
+    const { expenses } = await import('#/server/db/schema')
+    const db = await getDb()
+    const rows = await db.select().from(expenses)
+    expect(rows.some((row) => row.id === created.id)).toBe(false)
+  })
+
+  test('deletes every expense matching a filter', async () => {
+    await post({ ...valid, spentAt: '2026-08-01', description: 'A' })
+    await post({ ...valid, spentAt: '2026-08-01', description: 'B' })
+    await post({ ...valid, spentAt: '2026-08-02', description: 'C' })
+
+    const res = await del('?email=api@test.local&spentAt=2026-08-01')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, deleted: 2 })
+
+    const { getDb } = await import('#/server/db/client')
+    const { expenses } = await import('#/server/db/schema')
+    const db = await getDb()
+    const rows = await db.select().from(expenses)
+    const august = rows.filter((row) => row.spentAt.startsWith('2026-08'))
+    expect(august).toHaveLength(1)
+    expect(august[0].description).toBe('C')
   })
 })

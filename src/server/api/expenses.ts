@@ -229,6 +229,68 @@ export async function remove(args: { id: string }) {
   await db.delete(expenses).where(eq(expenses.id, args.id))
 }
 
+/* ------------------------------------------------------------------ */
+/* Session-less helpers used by the public API                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Deletes one expense by id, without a browser session.
+ * Only the public API calls this, and it authenticates with the shared key.
+ * Returns false when the row does not exist.
+ */
+export async function removeByIdForApi(id: string) {
+  const db = await getDb()
+  const [row] = await db
+    .select({ id: expenses.id })
+    .from(expenses)
+    .where(eq(expenses.id, id))
+    .limit(1)
+
+  if (!row) {
+    return false
+  }
+
+  await db.delete(expenses).where(eq(expenses.id, id))
+  return true
+}
+
+/**
+ * Deletes every expense of one account that matches the given filters.
+ * The caller must supply at least one filter so a mistake cannot wipe the
+ * whole table. Returns how many rows were removed.
+ */
+export async function removeMatchingForApi(args: {
+  userId: string
+  spentAt?: string
+  category?: string
+  currency?: string
+  description?: string
+}) {
+  const filters = [
+    args.spentAt ? eq(expenses.spentAt, args.spentAt) : null,
+    args.category ? eq(expenses.category, args.category) : null,
+    args.currency ? eq(expenses.currency, args.currency.toUpperCase()) : null,
+    args.description ? eq(expenses.description, args.description) : null,
+  ].filter((condition): condition is NonNullable<typeof condition> =>
+    Boolean(condition),
+  )
+
+  if (!filters.length) {
+    throw new Error('At least one filter is required.')
+  }
+
+  const where = and(eq(expenses.userId, args.userId), ...filters)
+  const db = await getDb()
+  const rows = await db.select({ id: expenses.id }).from(expenses).where(where)
+
+  if (!rows.length) {
+    return 0
+  }
+
+  await db.delete(expenses).where(where)
+  return rows.length
+}
+
 export async function importFromEmail(args: {
   userEmail: string
   provider: string
