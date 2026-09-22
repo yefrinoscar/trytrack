@@ -13,6 +13,7 @@ import type { FinanceActions } from '@/features/finance/shared'
 import { parseMoney } from '@/features/finance/shared'
 import { formatCurrency } from '@/lib/finance'
 import type { EmailExpenseImport, Expense } from '@/lib/finance'
+import { cn } from '@/lib/utils'
 
 interface DailyExpensesColumnProps {
   expenses: Expense[]
@@ -800,40 +801,23 @@ export function DailyExpensesColumn({
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<'expenses' | 'charts'>('expenses')
   const [emailReviewPage, setEmailReviewPage] = useState(0)
   const [emailImportCategory, setEmailImportCategory] = useState('Other')
   const [selectedEmailImport, setSelectedEmailImport] =
     useState<EmailExpenseImport | null>(null)
   const today = todayKey()
-  const todayEntries = useMemo(() => {
-    const optimisticEmailExpenseIds = getOptimisticEmailExpenseIds(expenses)
-    const expenseEntries = expenses
-      .filter((expense) => expense.spentAt === today)
-      .map((expense) => ({
-        createdAt: expense.createdAt,
-        expense,
-        id: expense.id,
-        kind: 'expense' as const,
-      }))
-    const emailEntries = emailExpenseImports
-      .filter(
-        (item) =>
-          item.spentAt === today &&
-          typeof item.amount === 'number' &&
-          Boolean(item.currency) &&
-          !optimisticEmailExpenseIds.has(item.id),
-      )
-      .map((item) => ({
-        createdAt: item.occurredAt ?? item.createdAt,
-        id: item.id,
-        item,
-        kind: 'email' as const,
-      }))
-
-    return [...expenseEntries, ...emailEntries].sort(
-      (left, right) => timeValue(right.createdAt) - timeValue(left.createdAt),
-    )
-  }, [emailExpenseImports, expenses, today])
+  const allExpenseEntries = useMemo(
+    () =>
+      expenses
+        .slice()
+        .sort(
+          (left, right) =>
+            timeValue(right.spentAt) - timeValue(left.spentAt) ||
+            timeValue(right.createdAt) - timeValue(left.createdAt),
+        ),
+    [expenses],
+  )
   const sortedEmailExpenseImports = useMemo(
     () => emailExpenseImports.slice().sort(compareEmailImportsByMostRecent),
     [emailExpenseImports],
@@ -885,366 +869,360 @@ export function DailyExpensesColumn({
 
   return (
     <div className="w-full rounded-[1.1rem] border border-border bg-card p-3 sm:p-3.5">
-      <div className="mb-3">
-        <div>
-          <p className="eyebrow">Today</p>
-          <h2 className="mt-1 text-base font-semibold tracking-tight text-foreground">
-            Daily expenses
-          </h2>
-        </div>
+      <div className="mb-3 flex items-center gap-1 rounded-lg bg-muted p-1">
+        <button
+          type="button"
+          className={cn(
+            'flex-1 rounded-md py-1.5 text-xs font-medium transition-colors',
+            tab === 'expenses'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+          onClick={() => setTab('expenses')}
+        >
+          All expenses
+        </button>
+        <button
+          type="button"
+          className={cn(
+            'flex-1 rounded-md py-1.5 text-xs font-medium transition-colors',
+            tab === 'charts'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+          onClick={() => setTab('charts')}
+        >
+          Charts
+        </button>
       </div>
 
-      <div className="rounded-lg bg-muted p-2.5">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Coffee, lunch..."
-            className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-foreground-faint"
-            value={description}
-            onChange={(event) => setDescription(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                submitExpense()
-              }
-            }}
+      {tab === 'charts' ? (
+        <>
+          <ExpenseCategoryChart
+            emailExpenseImports={emailExpenseImports}
+            expenses={expenses}
           />
-          <div className="flex w-24 items-baseline gap-1">
-            <span className="text-xs text-foreground-faint">
-              {defaultCurrency === 'PEN' ? 'S/' : '$'}
-            </span>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              placeholder="0.00"
-              className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-foreground-faint [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-              value={amount}
-              onChange={(event) => setAmount(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  submitExpense()
-                }
-              }}
-            />
-          </div>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="secondary"
-            disabled={actions.isWorking}
-            onClick={submitExpense}
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
-        {error ? (
-          <p className="mt-2 text-xs text-destructive">{error}</p>
-        ) : null}
-      </div>
-
-      <ExpenseCategoryChart
-        emailExpenseImports={emailExpenseImports}
-        expenses={expenses}
-      />
-      <DailySpendChart
-        emailExpenseImports={emailExpenseImports}
-        expenses={expenses}
-      />
-
-      {emailExpenseImports.length ? (
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                {emailExpenseImports.length} payments
-              </p>
-            </div>
-            {emailReviewPageCount > 1 ? (
-              <div className="flex items-center rounded-lg bg-muted p-1">
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant="ghost"
-                  disabled={currentEmailReviewPage === 0}
-                  onClick={() => {
-                    setEmailReviewPage((page) => Math.max(0, page - 1))
-                  }}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-                <span className="min-w-12 px-1 text-center font-mono text-[0.68rem] font-semibold text-foreground">
-                  {currentEmailReviewPage + 1}/{emailReviewPageCount}
+          <DailySpendChart
+            emailExpenseImports={emailExpenseImports}
+            expenses={expenses}
+          />
+        </>
+      ) : (
+        <>
+          <div className="rounded-lg bg-muted p-2.5">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Coffee, lunch..."
+                className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-foreground-faint"
+                value={description}
+                onChange={(event) => setDescription(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    submitExpense()
+                  }
+                }}
+              />
+              <div className="flex w-24 items-baseline gap-1">
+                <span className="text-xs text-foreground-faint">
+                  {defaultCurrency === 'PEN' ? 'S/' : '$'}
                 </span>
-                <Button
-                  type="button"
-                  size="icon-xs"
-                  variant="ghost"
-                  disabled={currentEmailReviewPage >= emailReviewPageCount - 1}
-                  onClick={() => {
-                    setEmailReviewPage((page) =>
-                      Math.min(emailReviewPageCount - 1, page + 1),
-                    )
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-foreground-faint [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  value={amount}
+                  onChange={(event) => setAmount(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      submitExpense()
+                    }
                   }}
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
+                />
               </div>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="secondary"
+                disabled={actions.isWorking}
+                onClick={submitExpense}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            {error ? (
+              <p className="mt-2 text-xs text-destructive">{error}</p>
             ) : null}
           </div>
 
-          {visibleEmailExpenseImports.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="w-full rounded-lg bg-muted p-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => {
-                setSelectedEmailImport(item)
-                setEmailImportCategory(
-                  item.category?.trim() || suggestEmailExpenseCategory(item),
-                )
-              }}
-            >
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
-                <div className="min-w-0 self-start">
-                  <div className="flex min-w-0 items-center gap-2">
-                    {isMissingCategory(item) ? (
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full bg-emerald-400"
-                        title="Needs category"
-                      />
-                    ) : null}
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      {item.merchant ?? item.subject ?? 'Email expense'}
-                    </p>
-                  </div>
+          {emailExpenseImports.length ? (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    {emailExpenseImports.length} payments
+                  </p>
                 </div>
-                <p className="min-w-[4.75rem] whitespace-nowrap text-right font-mono text-sm font-semibold text-foreground">
-                  {typeof item.amount === 'number'
-                    ? formatCurrency(
-                        item.amount,
-                        item.currency ?? defaultCurrency,
-                      )
-                    : '--'}
-                </p>
-                <div className="min-w-0 self-end">
-                  <EmailSourceTag source={item.source} />
-                </div>
-                <p className="self-end whitespace-nowrap text-right text-xs text-muted-foreground">
-                  {formatEmailImportDate(item.spentAt)}
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      <Dialog
-        open={Boolean(selectedEmailImport)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedEmailImport(null)
-          }
-        }}
-      >
-        <DialogContent className="max-h-[92vh] overflow-y-auto p-5 sm:p-6">
-          {selectedEmailImport ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>
-                  {selectedEmailImport.merchant ??
-                    selectedEmailImport.subject ??
-                    'Email expense'}
-                </DialogTitle>
-                <DialogDescription>
-                  {formatEmailImportDate(selectedEmailImport.spentAt)}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <EmailSourceTag source={selectedEmailImport.source} />
-                <p className="font-mono text-lg font-semibold text-foreground">
-                  {typeof selectedEmailImport.amount === 'number'
-                    ? formatCurrency(
-                        selectedEmailImport.amount,
-                        selectedEmailImport.currency ?? defaultCurrency,
-                      )
-                    : '--'}
-                </p>
-              </div>
-
-              <dl className="mt-4 grid gap-2 sm:grid-cols-2">
-                <DetailRow
-                  label="Spent date"
-                  value={formatEmailImportDate(selectedEmailImport.spentAt)}
-                />
-                <DetailRow
-                  label="Occurred at"
-                  value={formatEmailImportDateTime(
-                    selectedEmailImport.occurredAt,
-                  )}
-                />
-                <DetailRow
-                  label="Currency"
-                  value={selectedEmailImport.currency ?? defaultCurrency}
-                />
-                <DetailRow
-                  label="Subject"
-                  value={selectedEmailImport.subject}
-                />
-                <DetailRow label="From" value={selectedEmailImport.from} mono />
-                <DetailRow
-                  label="To"
-                  value={selectedEmailImport.to.join(', ')}
-                  mono
-                />
-                <DetailRow
-                  label="Email ID"
-                  value={shortImportId(selectedEmailImport.emailId)}
-                  mono
-                />
-                <DetailRow
-                  label="Message ID"
-                  value={selectedEmailImport.messageId}
-                  mono
-                />
-                <DetailRow
-                  label="Full email ID"
-                  value={selectedEmailImport.emailId}
-                  mono
-                />
-              </dl>
-
-              <div className="mt-4 space-y-2">
-                <label className="flex items-center justify-between gap-3 rounded-lg bg-muted p-2.5 text-sm font-medium text-foreground">
-                  <span>Don't count</span>
-                  <input
-                    type="checkbox"
-                    checked={false}
-                    disabled={actions.isWorking}
-                    className="h-4 w-4 accent-foreground"
-                    onChange={(event) => {
-                      if (event.currentTarget.checked) {
-                        void actions.dismissEmailExpenseImport(
-                          selectedEmailImport.id,
-                        )
-                        setSelectedEmailImport(null)
+                {emailReviewPageCount > 1 ? (
+                  <div className="flex items-center rounded-lg bg-muted p-1">
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      disabled={currentEmailReviewPage === 0}
+                      onClick={() => {
+                        setEmailReviewPage((page) => Math.max(0, page - 1))
+                      }}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </Button>
+                    <span className="min-w-12 px-1 text-center font-mono text-[0.68rem] font-semibold text-foreground">
+                      {currentEmailReviewPage + 1}/{emailReviewPageCount}
+                    </span>
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      disabled={
+                        currentEmailReviewPage >= emailReviewPageCount - 1
                       }
-                    }}
-                  />
-                </label>
-
-                <label
-                  className="text-[0.68rem] font-medium uppercase tracking-[0.08em] text-muted-foreground"
-                  htmlFor="email-import-category"
-                >
-                  Category
-                </label>
-                <Select
-                  id="email-import-category"
-                  value={emailImportCategory}
-                  onChange={(event) => {
-                    const category = event.currentTarget.value
-                    setEmailImportCategory(category)
-                    setSelectedEmailImport({
-                      ...selectedEmailImport,
-                      category,
-                    })
-                    void actions.updateEmailExpenseImportCategory({
-                      category,
-                      id: selectedEmailImport.id,
-                    })
-                  }}
-                >
-                  {EMAIL_EXPENSE_CATEGORIES.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </Select>
+                      onClick={() => {
+                        setEmailReviewPage((page) =>
+                          Math.min(emailReviewPageCount - 1, page + 1),
+                        )
+                      }}
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : null}
               </div>
-            </>
-          ) : null}
-        </DialogContent>
-      </Dialog>
 
-      <div className="mt-3 space-y-2">
-        {todayEntries.length ? (
-          todayEntries.map((entry) => {
-            if (entry.kind === 'email') {
-              const item = entry.item
-              const category =
-                item.category?.trim() || suggestEmailExpenseCategory(item)
-
-              return (
+              {visibleEmailExpenseImports.map((item) => (
                 <button
-                  key={`today-email-${item.id}`}
+                  key={item.id}
                   type="button"
-                  className="flex w-full items-center justify-between gap-3 rounded-lg bg-muted p-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="w-full rounded-lg bg-muted p-2.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => {
                     setSelectedEmailImport(item)
-                    setEmailImportCategory(category)
+                    setEmailImportCategory(
+                      item.category?.trim() ||
+                        suggestEmailExpenseCategory(item),
+                    )
                   }}
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <EmailSourceTag source={item.source} />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {item.merchant ?? item.subject ?? 'Email expense'}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {category}
-                      </p>
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2">
+                    <div className="min-w-0 self-start">
+                      <div className="flex min-w-0 items-center gap-2">
+                        {isMissingCategory(item) ? (
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full bg-emerald-400"
+                            title="Needs category"
+                          />
+                        ) : null}
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {item.merchant ?? item.subject ?? 'Email expense'}
+                        </p>
+                      </div>
                     </div>
+                    <p className="min-w-[4.75rem] whitespace-nowrap text-right font-mono text-sm font-semibold text-foreground">
+                      {typeof item.amount === 'number'
+                        ? formatCurrency(
+                            item.amount,
+                            item.currency ?? defaultCurrency,
+                          )
+                        : '--'}
+                    </p>
+                    <div className="min-w-0 self-end">
+                      <EmailSourceTag source={item.source} />
+                    </div>
+                    <p className="self-end whitespace-nowrap text-right text-xs text-muted-foreground">
+                      {formatEmailImportDate(item.spentAt)}
+                    </p>
                   </div>
-                  <span className="font-mono text-sm text-foreground">
-                    {formatCurrency(item.amount!, item.currency!)}
-                  </span>
                 </button>
-              )
-            }
+              ))}
+            </div>
+          ) : null}
 
-            const { expense } = entry
+          <Dialog
+            open={Boolean(selectedEmailImport)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setSelectedEmailImport(null)
+              }
+            }}
+          >
+            <DialogContent className="max-h-[92vh] overflow-y-auto p-5 sm:p-6">
+              {selectedEmailImport ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>
+                      {selectedEmailImport.merchant ??
+                        selectedEmailImport.subject ??
+                        'Email expense'}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {formatEmailImportDate(selectedEmailImport.spentAt)}
+                    </DialogDescription>
+                  </DialogHeader>
 
-            return (
-              <div
-                key={expense.id}
-                className="flex items-center justify-between gap-3 rounded-lg bg-muted p-2.5"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {expense.description}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {expense.category}
-                  </p>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <EmailSourceTag source={selectedEmailImport.source} />
+                    <p className="font-mono text-lg font-semibold text-foreground">
+                      {typeof selectedEmailImport.amount === 'number'
+                        ? formatCurrency(
+                            selectedEmailImport.amount,
+                            selectedEmailImport.currency ?? defaultCurrency,
+                          )
+                        : '--'}
+                    </p>
+                  </div>
+
+                  <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <DetailRow
+                      label="Spent date"
+                      value={formatEmailImportDate(selectedEmailImport.spentAt)}
+                    />
+                    <DetailRow
+                      label="Occurred at"
+                      value={formatEmailImportDateTime(
+                        selectedEmailImport.occurredAt,
+                      )}
+                    />
+                    <DetailRow
+                      label="Currency"
+                      value={selectedEmailImport.currency ?? defaultCurrency}
+                    />
+                    <DetailRow
+                      label="Subject"
+                      value={selectedEmailImport.subject}
+                    />
+                    <DetailRow
+                      label="From"
+                      value={selectedEmailImport.from}
+                      mono
+                    />
+                    <DetailRow
+                      label="To"
+                      value={selectedEmailImport.to.join(', ')}
+                      mono
+                    />
+                    <DetailRow
+                      label="Email ID"
+                      value={shortImportId(selectedEmailImport.emailId)}
+                      mono
+                    />
+                    <DetailRow
+                      label="Message ID"
+                      value={selectedEmailImport.messageId}
+                      mono
+                    />
+                    <DetailRow
+                      label="Full email ID"
+                      value={selectedEmailImport.emailId}
+                      mono
+                    />
+                  </dl>
+
+                  <div className="mt-4 space-y-2">
+                    <label className="flex items-center justify-between gap-3 rounded-lg bg-muted p-2.5 text-sm font-medium text-foreground">
+                      <span>Don't count</span>
+                      <input
+                        type="checkbox"
+                        checked={false}
+                        disabled={actions.isWorking}
+                        className="h-4 w-4 accent-foreground"
+                        onChange={(event) => {
+                          if (event.currentTarget.checked) {
+                            void actions.dismissEmailExpenseImport(
+                              selectedEmailImport.id,
+                            )
+                            setSelectedEmailImport(null)
+                          }
+                        }}
+                      />
+                    </label>
+
+                    <label
+                      className="text-[0.68rem] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+                      htmlFor="email-import-category"
+                    >
+                      Category
+                    </label>
+                    <Select
+                      id="email-import-category"
+                      value={emailImportCategory}
+                      onChange={(event) => {
+                        const category = event.currentTarget.value
+                        setEmailImportCategory(category)
+                        setSelectedEmailImport({
+                          ...selectedEmailImport,
+                          category,
+                        })
+                        void actions.updateEmailExpenseImportCategory({
+                          category,
+                          id: selectedEmailImport.id,
+                        })
+                      }}
+                    >
+                      {EMAIL_EXPENSE_CATEGORIES.map((category) => (
+                        <option key={category} value={category}>
+                          {category}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </>
+              ) : null}
+            </DialogContent>
+          </Dialog>
+
+          <div className="mt-3 space-y-2">
+            {allExpenseEntries.length ? (
+              allExpenseEntries.map((expense) => (
+                <div
+                  key={expense.id}
+                  className="flex items-center justify-between gap-3 rounded-lg bg-muted p-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {expense.description}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {expense.spentAt} · {expense.category}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm text-foreground">
+                      {formatCurrency(expense.amount, expense.currency)}
+                    </span>
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      onClick={() => {
+                        void actions.removeItem({
+                          kind: 'expenses',
+                          id: expense.id,
+                        })
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm text-foreground">
-                    {formatCurrency(expense.amount, expense.currency)}
-                  </span>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    onClick={() => {
-                      void actions.removeItem({
-                        kind: 'expenses',
-                        id: expense.id,
-                      })
-                    }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            )
-          })
-        ) : (
-          <p className="rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
-            No expenses logged today.
-          </p>
-        )}
-      </div>
+              ))
+            ) : (
+              <p className="rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
+                No expenses yet.
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
