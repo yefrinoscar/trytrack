@@ -227,6 +227,24 @@ export async function remove(args: { id: string }) {
 
   const db = await getDb()
   await db.delete(expenses).where(eq(expenses.id, args.id))
+  await dismissImportsForExpenses([args.id])
+}
+
+/**
+ * Marks the email imports that produced these expenses as dismissed, so a
+ * deleted expense does not leave a "confirmed" import behind that would keep
+ * counting or reappear in the review list.
+ */
+async function dismissImportsForExpenses(expenseIds: string[]) {
+  if (!expenseIds.length) {
+    return
+  }
+
+  const db = await getDb()
+  await db
+    .update(emailExpenseImports)
+    .set({ status: 'dismissed', updatedAt: Date.now() })
+    .where(inArray(emailExpenseImports.confirmedExpenseId, expenseIds))
 }
 
 /* ------------------------------------------------------------------ */
@@ -251,6 +269,7 @@ export async function removeByIdForApi(id: string) {
   }
 
   await db.delete(expenses).where(eq(expenses.id, id))
+  await dismissImportsForExpenses([id])
   return true
 }
 
@@ -288,6 +307,7 @@ export async function removeMatchingForApi(args: {
   }
 
   await db.delete(expenses).where(where)
+  await dismissImportsForExpenses(rows.map((row) => row.id))
   return rows.length
 }
 
