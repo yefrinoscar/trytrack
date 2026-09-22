@@ -373,6 +373,43 @@ function getDefaultDebtPaymentMode(type: DebtType): DebtPaymentMode {
   return type === 'Credit card' ? 'revolving' : 'installments'
 }
 
+/**
+ * Maps an `expenses` row from D1 onto the `Expense` shape the dashboard uses.
+ * Expenses live in the database (not localStorage) so the public API and email
+ * imports are visible in the UI too.
+ */
+export function toExpenseFromRow(value: Doc<'expenses'>): Expense {
+  return {
+    id: value._id,
+    amount: value.amount,
+    currency: value.currency,
+    category: value.category,
+    description: value.description,
+    ...(value.merchant ? { merchant: value.merchant } : {}),
+    spentAt: value.spentAt,
+    createdAt: new Date(value.createdAt).toISOString(),
+    ...(value.updatedAt
+      ? { updatedAt: new Date(value.updatedAt).toISOString() }
+      : {}),
+  }
+}
+
+/**
+ * Identity of an expense used to merge the database and any rows a browser
+ * still has in localStorage, so the same expense is never stored twice.
+ * Accepts both a D1 row and a local `Expense`.
+ */
+export function expenseFingerprint(value: Record<string, any>) {
+  return [
+    String(value.spentAt ?? ''),
+    String(value.currency ?? '').toUpperCase(),
+    Number(value.amount ?? 0).toFixed(2),
+    String(value.description ?? '')
+      .trim()
+      .toLowerCase(),
+  ].join('|')
+}
+
 function normalizeDebtInstallments(value: number) {
   return Math.max(1, Math.round(value))
 }
@@ -935,8 +972,51 @@ export function useFinanceDashboard(enabled = true) {
         {},
       )
 
+      // Expenses live in the database so API-created and email-imported rows
+      // are visible. Anything this browser still has in localStorage is
+      // migrated once, deduped so re-runs cannot create duplicates.
+      let expenseRows = await apiClient.query(api.expenses.listByUser, {
+        userId: user._id,
+      })
+
+      if (localData.expenses.length) {
+        const known = new Set(
+          expenseRows.map((row: Doc<'expenses'>) => expenseFingerprint(row)),
+        )
+        const missing = localData.expenses.filter(
+          (expense) => !known.has(expenseFingerprint(expense)),
+        )
+
+        if (missing.length) {
+          await Promise.all(
+            missing.map((expense) =>
+              apiClient.mutation(api.expenses.create, {
+                userId: user._id,
+                amount: expense.amount,
+                currency: expense.currency,
+                category: expense.category,
+                description: expense.description,
+                ...(expense.merchant ? { merchant: expense.merchant } : {}),
+                spentAt: expense.spentAt,
+              }),
+            ),
+          )
+
+          expenseRows = await apiClient.query(api.expenses.listByUser, {
+            userId: user._id,
+          })
+
+          // The database is the source of truth now, so drop the local copy to
+          // avoid re-creating these rows on the next load.
+          await writeDashboardData({ ...localData, expenses: [] })
+        }
+      }
+
       return {
         ...localData,
+        expenses: expenseRows.map((row: Doc<'expenses'>) =>
+          toExpenseFromRow(row),
+        ),
         emailExpenseImports: emailExpenseImports.map((item: any) => ({
           id: item._id,
           emailId: item.emailId,
@@ -1045,23 +1125,25 @@ export function useFinanceActions() {
         return null
       }
 
+      if (input.kind === 'expenses') {
+        const localData = await readDashboardData()
+        const user = await getOrCreateAppUser(
+          apiClient,
+          localData.settings.currency,
+        )
+
+        await apiClient.mutation(api.expenses.create, {
+          userId: user._id,
+          ...input.value,
+        })
+
+        return null
+      }
+
       return updateDashboardData((current) => {
         const createdAt = new Date().toISOString()
 
         switch (input.kind) {
-          case 'expenses':
-            return {
-              ...current,
-              expenses: [
-                {
-                  ...input.value,
-                  id: createId('expense'),
-                  createdAt,
-                  updatedAt: createdAt,
-                },
-                ...current.expenses,
-              ],
-            }
           case 'incomes':
             return {
               ...current,
@@ -1141,7 +1223,7 @@ export function useFinanceActions() {
       }
     },
     onSettled: (_data, _error, input) => {
-      if (input.kind === 'debts') {
+      if (input.kind === 'debts' || input.kind === 'expenses') {
         void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
       }
     },
@@ -1160,6 +1242,13 @@ export function useFinanceActions() {
         return null
       }
 
+      if (kind === 'expenses') {
+        await apiClient.mutation(api.expenses.remove, {
+          id: id as Id<'expenses'>,
+        })
+        return null
+      }
+
       return updateDashboardData((current) => ({
         ...current,
         [kind]: current[kind].filter((item) => item.id !== id),
@@ -1169,7 +1258,7 @@ export function useFinanceActions() {
       kind,
       id,
     }): Promise<FinanceDashboardMutationContext> => {
-      if (kind !== 'debts') {
+      if (kind !== 'debts' && kind !== 'expenses') {
         return {}
       }
 
@@ -1184,7 +1273,14 @@ export function useFinanceActions() {
 
       syncCache({
         ...previousDashboard,
-        debts: previousDashboard.debts.filter((debt) => debt.id !== id),
+        debts:
+          kind === 'debts'
+            ? previousDashboard.debts.filter((debt) => debt.id !== id)
+            : previousDashboard.debts,
+        expenses:
+          kind === 'expenses'
+            ? previousDashboard.expenses.filter((expense) => expense.id !== id)
+            : previousDashboard.expenses,
       })
 
       return { previousDashboard }
@@ -1195,7 +1291,7 @@ export function useFinanceActions() {
       }
     },
     onSuccess: (next, { kind }) => {
-      if (kind === 'debts') {
+      if (kind === 'debts' || kind === 'expenses') {
         void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
         return
       }

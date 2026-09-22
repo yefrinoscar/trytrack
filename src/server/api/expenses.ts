@@ -116,7 +116,7 @@ export async function listByUser(args: { userId: string }) {
     .from(expenses)
     .where(eq(expenses.userId, args.userId))
     .orderBy(desc(expenses.spentAt))
-    .limit(100)
+    .limit(500)
   return rows.map(toDoc)
 }
 
