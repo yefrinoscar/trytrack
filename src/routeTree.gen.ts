@@ -20,6 +20,7 @@ import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DebtsRouteImport } from './routes/debts'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiV1ExpensesRouteImport } from './routes/api/v1/expenses'
 import { Route as ApiEmailInboundRouteImport } from './routes/api/email/inbound'
 import { Route as ApiEmailBackfillRouteImport } from './routes/api/email/backfill'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -85,6 +86,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1ExpensesRoute = ApiV1ExpensesRouteImport.update({
+  id: '/api/v1/expenses',
+  path: '/api/v1/expenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiEmailInboundRoute = ApiEmailInboundRouteImport.update({
   id: '/api/email/inbound',
   path: '/api/email/inbound',
@@ -146,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/v1/expenses': typeof ApiV1ExpensesRoute
   '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
   '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
@@ -168,6 +175,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/v1/expenses': typeof ApiV1ExpensesRoute
   '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
   '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
@@ -191,6 +199,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
+  '/api/v1/expenses': typeof ApiV1ExpensesRoute
   '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
   '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
@@ -215,6 +224,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/v1/expenses'
     | '/api/email/gmail/callback'
     | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
@@ -237,6 +247,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/v1/expenses'
     | '/api/email/gmail/callback'
     | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
@@ -259,6 +270,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/email/backfill'
     | '/api/email/inbound'
+    | '/api/v1/expenses'
     | '/api/email/gmail/callback'
     | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
@@ -282,6 +294,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiEmailBackfillRoute: typeof ApiEmailBackfillRoute
   ApiEmailInboundRoute: typeof ApiEmailInboundRoute
+  ApiV1ExpensesRoute: typeof ApiV1ExpensesRoute
   ApiEmailGmailCallbackRoute: typeof ApiEmailGmailCallbackRoute
   ApiEmailGmailConnectRoute: typeof ApiEmailGmailConnectRoute
   ApiEmailGmailPollRoute: typeof ApiEmailGmailPollRoute
@@ -369,6 +382,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/expenses': {
+      id: '/api/v1/expenses'
+      path: '/api/v1/expenses'
+      fullPath: '/api/v1/expenses'
+      preLoaderRoute: typeof ApiV1ExpensesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/email/inbound': {
       id: '/api/email/inbound'
       path: '/api/email/inbound'
@@ -450,6 +470,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiEmailBackfillRoute: ApiEmailBackfillRoute,
   ApiEmailInboundRoute: ApiEmailInboundRoute,
+  ApiV1ExpensesRoute: ApiV1ExpensesRoute,
   ApiEmailGmailCallbackRoute: ApiEmailGmailCallbackRoute,
   ApiEmailGmailConnectRoute: ApiEmailGmailConnectRoute,
   ApiEmailGmailPollRoute: ApiEmailGmailPollRoute,

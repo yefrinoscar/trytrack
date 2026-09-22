@@ -78,7 +78,6 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     if (pathname.startsWith('/api/')) {
       return { isAuthenticated: false }
     }
-
     const auth = await getAuth()
     const isAuthenticated = auth.isAuthenticated
 

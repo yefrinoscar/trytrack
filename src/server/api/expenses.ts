@@ -171,6 +171,40 @@ export async function create(args: {
   return id
 }
 
+/**
+ * Creates an expense for a specific account without a browser session.
+ *
+ * Used by the public API (`/api/v1/expenses`), which authenticates with an
+ * `EXPENSES_API_KEY` header instead of a Better Auth cookie. The caller must
+ * resolve the target account first via `findUserByEmail`.
+ */
+export async function createForUser(args: {
+  userId: string
+  amount: number
+  currency: string
+  description: string
+  category: string
+  merchant?: string
+  spentAt: string
+}) {
+  const db = await getDb()
+  const now = Date.now()
+  const id = newId()
+  await db.insert(expenses).values({
+    id,
+    userId: args.userId,
+    amount: args.amount,
+    currency: args.currency,
+    description: args.description,
+    category: args.category,
+    merchant: args.merchant ?? null,
+    spentAt: args.spentAt,
+    createdAt: now,
+    updatedAt: now,
+  })
+  return id
+}
+
 export async function update(args: {
   id: string
   amount?: number
