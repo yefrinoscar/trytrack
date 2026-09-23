@@ -84,6 +84,7 @@ const dashboardFixture: DashboardData = {
     enabledCurrencies: ['USD', 'PEN'],
     theme: 'dark',
     motion: 'full',
+    usdPenRate: 3.38,
     lastUpdated: '2026-03-01T00:00:00.000Z',
   },
 }

@@ -142,7 +142,47 @@ export interface DashboardSettings {
   enabledCurrencies: string[]
   theme: DashboardTheme
   motion: DashboardMotion
+  /**
+   * How many PEN one USD is worth. Only USD<->PEN conversion is supported, and
+   * only to show a rough equivalent next to the original amount.
+   */
+  usdPenRate: number
   lastUpdated: string
+}
+
+/** Fallback USD->PEN rate used until the user sets their own. */
+export const DEFAULT_USD_PEN_RATE = 3.38
+
+/**
+ * Converts between USD and PEN. Returns null when the pair is not supported,
+ * so callers never show a confidently wrong number.
+ */
+export function convertCurrency(
+  amount: number,
+  from: string,
+  to: string,
+  usdPenRate: number,
+): number | null {
+  const source = from.toUpperCase()
+  const target = to.toUpperCase()
+
+  if (source === target) {
+    return amount
+  }
+
+  if (!Number.isFinite(usdPenRate) || usdPenRate <= 0) {
+    return null
+  }
+
+  if (source === 'USD' && target === 'PEN') {
+    return amount * usdPenRate
+  }
+
+  if (source === 'PEN' && target === 'USD') {
+    return amount / usdPenRate
+  }
+
+  return null
 }
 
 export type DashboardTheme = 'dark' | 'light'
@@ -624,6 +664,7 @@ const seedData: DashboardData = {
     enabledCurrencies: ['USD', 'PEN'],
     theme: 'dark',
     motion: 'full',
+    usdPenRate: DEFAULT_USD_PEN_RATE,
     lastUpdated: '2026-03-10T16:00:00.000Z',
   },
 }
@@ -702,6 +743,7 @@ function emptyDashboardData(currency = 'USD'): DashboardData {
       enabledCurrencies,
       theme: 'dark',
       motion: 'full',
+      usdPenRate: DEFAULT_USD_PEN_RATE,
       lastUpdated: new Date().toISOString(),
     },
   }
@@ -846,6 +888,12 @@ function normalizeDashboardData(input: unknown): DashboardData {
         value.settings?.motion === 'full'
           ? value.settings.motion
           : fallback.settings.motion,
+      usdPenRate:
+        typeof value.settings?.usdPenRate === 'number' &&
+        Number.isFinite(value.settings.usdPenRate) &&
+        value.settings.usdPenRate > 0
+          ? value.settings.usdPenRate
+          : fallback.settings.usdPenRate,
       lastUpdated:
         typeof value.settings?.lastUpdated === 'string'
           ? value.settings.lastUpdated
@@ -881,6 +929,7 @@ function starterDashboardData(currency = 'USD'): DashboardData {
   )
 
   next.settings = {
+    ...next.settings,
     currency: enabledCurrencies.includes(normalizedCurrency)
       ? normalizedCurrency
       : enabledCurrencies[0]!,

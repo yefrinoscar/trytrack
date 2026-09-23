@@ -1,5 +1,9 @@
 import { useMemo } from 'react'
-import { formatCurrency, getDebtPlannedPayment } from '@/lib/finance'
+import {
+  convertCurrency,
+  formatCurrency,
+  getDebtPlannedPayment,
+} from '@/lib/finance'
 import type { Debt, Expense, RecurringPayment } from '@/lib/finance'
 import { MonthlySpendChart } from './monthly-spend-chart'
 
@@ -7,6 +11,8 @@ interface DebtsSummaryColumnProps {
   debts: Debt[]
   expenses: Expense[]
   recurringPayments: RecurringPayment[]
+  /** PEN per USD, used to show the equivalent amount in the other currency. */
+  usdPenRate: number
 }
 
 /**
@@ -18,6 +24,7 @@ export function DebtsSummaryColumn({
   debts,
   expenses,
   recurringPayments,
+  usdPenRate,
 }: DebtsSummaryColumnProps) {
   const totals = useMemo(() => {
     const debtMonthly = new Map<string, number>()
@@ -71,11 +78,13 @@ export function DebtsSummaryColumn({
         <dl className="grid gap-2 lg:border-l lg:border-border lg:pl-4">
           <SummaryStat
             label="Debt per month"
+            usdPenRate={usdPenRate}
             values={totals.debt}
             valueClassName="text-warning"
           />
           <SummaryStat
             label="Recurring per month"
+            usdPenRate={usdPenRate}
             values={totals.recurring}
             valueClassName="text-success"
           />
@@ -87,10 +96,12 @@ export function DebtsSummaryColumn({
 
 function SummaryStat({
   label,
+  usdPenRate,
   values,
   valueClassName,
 }: {
   label: string
+  usdPenRate: number
   values: Array<[string, number]>
   valueClassName: string
 }) {
@@ -99,13 +110,31 @@ function SummaryStat({
       <dt className="text-[10px] uppercase tracking-[0.12em] text-foreground-faint">
         {label}
       </dt>
-      <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 font-mono text-sm">
+      <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-3 font-mono text-sm">
         {values.length ? (
-          values.map(([currency, total]) => (
-            <span key={currency} className={valueClassName}>
-              {formatCurrency(total, currency)}
-            </span>
-          ))
+          values.map(([currency, total]) => {
+            // Show the equivalent in the other supported currency right next
+            // to the real amount, so the number is never mistaken for a total.
+            const target =
+              currency === 'USD' ? 'PEN' : currency === 'PEN' ? 'USD' : null
+            const converted = target
+              ? convertCurrency(total, currency, target, usdPenRate)
+              : null
+
+            return (
+              <span key={currency}>
+                <span className={valueClassName}>
+                  {formatCurrency(total, currency)}
+                </span>
+                {converted !== null && target ? (
+                  <span className="text-muted-foreground">
+                    {' · '}
+                    {formatCurrency(converted, target)}
+                  </span>
+                ) : null}
+              </span>
+            )
+          })
         ) : (
           <span className="text-muted-foreground">—</span>
         )}

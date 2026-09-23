@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { MoonStar, Sparkles, SunMedium, WalletCards } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { FinancePageState } from '@/features/finance/shared'
 import type { FinanceActions } from '@/features/finance/shared'
@@ -145,6 +146,31 @@ function SettingsView({
                     </option>
                   ))}
                 </Select>
+              </label>
+
+              <label className="flex min-w-[200px] flex-col gap-2">
+                <span className="text-sm font-medium text-foreground">
+                  USD to PEN rate
+                </span>
+                <Input
+                  id="usd-pen-rate"
+                  type="number"
+                  inputMode="decimal"
+                  min="0.0001"
+                  step="0.01"
+                  disabled={actions.isWorking}
+                  value={data.settings.usdPenRate}
+                  onChange={(event) => {
+                    const value = Number(event.currentTarget.value)
+                    if (Number.isFinite(value) && value > 0) {
+                      void actions.updateSettings({ usdPenRate: value })
+                    }
+                  }}
+                />
+                <span className="text-xs text-muted-foreground">
+                  PEN per 1 USD, used to show the equivalent amount next to a
+                  total in the other currency.
+                </span>
               </label>
 
               <div className="min-w-[180px] rounded-2xl border border-border bg-muted px-4 py-3">
