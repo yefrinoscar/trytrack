@@ -12,10 +12,10 @@ import type { Debt, Expense, RecurringPayment } from '@/lib/finance'
  * most" without comparing S/ against $.
  */
 const WIDTH = 700
-const HEIGHT = 108
+const HEIGHT = 88
 const PAD_X = 8
-const PAD_TOP = 10
-const PAD_BOTTOM = 18
+const PAD_TOP = 8
+const PAD_BOTTOM = 14
 
 function buildPath(points: Array<{ x: number; y: number }>) {
   if (!points.length) {
@@ -133,7 +133,7 @@ export function MonthlySpendChart({
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
-        className="h-[108px] w-full"
+        className="h-[88px] w-full"
         role="img"
         aria-label={`Daily spending for ${monthLabel}`}
       >
@@ -176,7 +176,7 @@ export function MonthlySpendChart({
         <span>{daysElapsed}</span>
       </div>
 
-      <p className="mt-1.5 text-[11px] text-foreground-faint">
+      <p className="mt-1 text-[11px] text-foreground-faint">
         {currency && peak.day > 0 ? (
           <>
             Most spent on{' '}

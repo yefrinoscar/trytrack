@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
-import { AnimatedCurrencyValue } from '@/features/finance/shared'
-import { getDebtPlannedPayment } from '@/lib/finance'
+import { formatCurrency, getDebtPlannedPayment } from '@/lib/finance'
 import type { Debt, Expense, RecurringPayment } from '@/lib/finance'
 import { MonthlySpendChart } from './monthly-spend-chart'
 
@@ -10,65 +9,58 @@ interface DebtsSummaryColumnProps {
   recurringPayments: RecurringPayment[]
 }
 
+/**
+ * Compact overview: the month's spending shape plus the committed monthly
+ * totals. It deliberately shows sums rather than itemised lists, which belong
+ * in the columns below.
+ */
 export function DebtsSummaryColumn({
   debts,
   expenses,
   recurringPayments,
 }: DebtsSummaryColumnProps) {
-  const activeRecurringPayments = useMemo(
-    () => recurringPayments.filter((payment) => payment.status === 'active'),
-    [recurringPayments],
-  )
+  const totals = useMemo(() => {
+    const debtMonthly = new Map<string, number>()
+    const recurringMonthly = new Map<string, number>()
 
-  const overviewByCurrency = useMemo(() => {
-    const totals = new Map<
-      string,
-      { debtBalance: number; recurringMonthly: number; debtMonthly: number }
-    >()
-
-    debts.forEach((debt) => {
+    for (const debt of debts) {
+      if (debt.status === 'closed' || debt.balance <= 0) {
+        continue
+      }
       const currency = debt.currency.toUpperCase()
-      const current = totals.get(currency) ?? {
-        debtBalance: 0,
-        recurringMonthly: 0,
-        debtMonthly: 0,
-      }
-      totals.set(currency, {
-        ...current,
-        debtBalance: current.debtBalance + debt.balance,
-        debtMonthly: current.debtMonthly + getDebtPlannedPayment(debt),
-      })
-    })
+      debtMonthly.set(
+        currency,
+        (debtMonthly.get(currency) ?? 0) + getDebtPlannedPayment(debt),
+      )
+    }
 
-    activeRecurringPayments.forEach((payment) => {
+    for (const payment of recurringPayments) {
+      if (payment.status !== 'active') {
+        continue
+      }
       const currency = payment.currency.toUpperCase()
-      const current = totals.get(currency) ?? {
-        debtBalance: 0,
-        recurringMonthly: 0,
-        debtMonthly: 0,
-      }
-      totals.set(currency, {
-        ...current,
-        recurringMonthly: current.recurringMonthly + payment.amount,
-      })
-    })
+      recurringMonthly.set(
+        currency,
+        (recurringMonthly.get(currency) ?? 0) + payment.amount,
+      )
+    }
 
-    return Array.from(totals.entries()).sort(([left], [right]) =>
-      left.localeCompare(right),
-    )
-  }, [activeRecurringPayments, debts])
+    const sort = (map: Map<string, number>) =>
+      Array.from(map.entries()).sort(([left], [right]) =>
+        left.localeCompare(right),
+      )
+
+    return {
+      debt: sort(debtMonthly),
+      recurring: sort(recurringMonthly),
+    }
+  }, [debts, recurringPayments])
 
   return (
-    <div className="w-full rounded-[1.1rem] border border-border bg-card p-2.5 sm:p-3">
-      <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
+    <div className="w-full rounded-[1.1rem] border border-border bg-card p-3">
+      <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr] lg:items-center">
         <div className="min-w-0">
-          <div className="mb-1.5">
-            <p className="eyebrow">Overview</p>
-            <h2 className="mt-0.5 text-sm font-semibold tracking-tight text-foreground">
-              Summary
-            </h2>
-          </div>
-
+          <p className="eyebrow">Overview · Summary</p>
           <MonthlySpendChart
             debts={debts}
             expenses={expenses}
@@ -76,129 +68,48 @@ export function DebtsSummaryColumn({
           />
         </div>
 
-        {/* Stacked, not side by side: three narrow columns left the lists
-            squeezed and the panels stretched with empty space below. */}
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <SummaryPanel
-            title="Monthly debt payments"
-            empty={!debts.length ? 'No debts' : null}
-          >
-            {debts.map((debt) => (
-              <SummaryRow
-                key={debt.id}
-                label={debt.name}
-                currency={debt.currency}
-                value={getDebtPlannedPayment(debt)}
-                valueClassName="text-warning"
-              />
-            ))}
-          </SummaryPanel>
-
-          <SummaryPanel
-            title="Recurring payments"
-            empty={
-              !activeRecurringPayments.length ? 'No recurring payments' : null
-            }
-          >
-            {activeRecurringPayments.map((payment) => (
-              <SummaryRow
-                key={payment.id}
-                label={payment.name}
-                currency={payment.currency}
-                value={payment.amount}
-                valueClassName="text-success"
-              />
-            ))}
-          </SummaryPanel>
-
-          <SummaryPanel
-            title="Combined monthly"
-            empty={!overviewByCurrency.length ? 'No data' : null}
-          >
-            {overviewByCurrency.map(([currency, totals]) => (
-              <div
-                key={currency}
-                className="rounded-md border border-border bg-card px-2 py-1.5"
-              >
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground-faint">
-                  {currency}
-                </p>
-                <div className="space-y-1">
-                  <SummaryRow
-                    label="Debt"
-                    currency={currency}
-                    value={totals.debtMonthly}
-                  />
-                  <SummaryRow
-                    label="Recurring"
-                    currency={currency}
-                    value={totals.recurringMonthly}
-                  />
-                  <div className="flex items-baseline justify-between border-t border-border pt-1 font-semibold">
-                    <span className="text-foreground">Total</span>
-                    <AnimatedCurrencyValue
-                      className="font-mono whitespace-nowrap text-warning"
-                      currency={currency}
-                      value={totals.debtMonthly + totals.recurringMonthly}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </SummaryPanel>
-        </div>
+        <dl className="grid gap-2 lg:border-l lg:border-border lg:pl-4">
+          <SummaryStat
+            label="Debt per month"
+            values={totals.debt}
+            valueClassName="text-warning"
+          />
+          <SummaryStat
+            label="Recurring per month"
+            values={totals.recurring}
+            valueClassName="text-success"
+          />
+        </dl>
       </div>
     </div>
   )
 }
 
-function SummaryPanel({
-  title,
-  empty,
-  children,
-}: {
-  title: string
-  empty: string | null
-  children: React.ReactNode
-}) {
-  return (
-    <div className="rounded-lg bg-muted p-2">
-      <p className="mb-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground-faint">
-        {title}
-      </p>
-      <div className="space-y-1 text-xs">
-        {empty ? (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">{empty}</span>
-            <span className="font-mono text-foreground">--</span>
-          </div>
-        ) : (
-          children
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SummaryRow({
+function SummaryStat({
   label,
-  currency,
-  value,
-  valueClassName = 'text-foreground',
+  values,
+  valueClassName,
 }: {
   label: string
-  currency: string
-  value: number
-  valueClassName?: string
+  values: Array<[string, number]>
+  valueClassName: string
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="min-w-0 truncate text-muted-foreground">{label}</span>
-      <AnimatedCurrencyValue
-        className={`font-mono whitespace-nowrap ${valueClassName}`}
-        currency={currency}
-        value={value}
-      />
+    <div>
+      <dt className="text-[10px] uppercase tracking-[0.12em] text-foreground-faint">
+        {label}
+      </dt>
+      <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 font-mono text-sm">
+        {values.length ? (
+          values.map(([currency, total]) => (
+            <span key={currency} className={valueClassName}>
+              {formatCurrency(total, currency)}
+            </span>
+          ))
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </dd>
     </div>
   )
 }
