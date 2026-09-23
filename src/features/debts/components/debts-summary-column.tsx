@@ -1,19 +1,19 @@
 import { useMemo } from 'react'
-import {
-  AnimatedCurrencyValue,
-  DebtProjectionChart,
-} from '@/features/finance/shared'
-import { getDebtPlannedPayment, getDebtProjection } from '@/lib/finance'
-import type { Debt, RecurringPayment } from '@/lib/finance'
+import { AnimatedCurrencyValue } from '@/features/finance/shared'
+import { getDebtPlannedPayment } from '@/lib/finance'
+import type { Debt, Expense, RecurringPayment } from '@/lib/finance'
+import { MonthlySpendChart } from './monthly-spend-chart'
 
 interface DebtsSummaryColumnProps {
   debts: Debt[]
+  expenses: Expense[]
   recurringPayments: RecurringPayment[]
   defaultCurrency: string
 }
 
 export function DebtsSummaryColumn({
   debts,
+  expenses,
   recurringPayments,
   defaultCurrency,
 }: DebtsSummaryColumnProps) {
@@ -60,24 +60,6 @@ export function DebtsSummaryColumn({
     )
   }, [activeRecurringPayments, debts])
 
-  const projection = useMemo(() => getDebtProjection(debts), [debts])
-  const projectionSeries = useMemo(() => {
-    const groups = new Map<string, Debt[]>()
-    debts.forEach((debt) => {
-      const currency = debt.currency.toUpperCase()
-      const current = groups.get(currency) ?? []
-      current.push(debt)
-      groups.set(currency, current)
-    })
-
-    return Array.from(groups.entries())
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([currency, currencyDebts]) => ({
-        currency,
-        points: getDebtProjection(currencyDebts),
-      }))
-      .filter((series) => series.points.length > 0)
-  }, [debts])
   return (
     <div className="w-full rounded-[1.1rem] border border-border bg-card p-3 sm:p-3.5">
       <div className="grid gap-3 lg:grid-cols-[0.8fr_1.2fr]">
@@ -89,12 +71,7 @@ export function DebtsSummaryColumn({
             </h2>
           </div>
 
-          <DebtProjectionChart
-            currency={defaultCurrency}
-            points={projection}
-            series={projectionSeries}
-            compact
-          />
+          <MonthlySpendChart currency={defaultCurrency} expenses={expenses} />
         </div>
 
         <div className="grid min-w-0 gap-2 lg:grid-cols-3">

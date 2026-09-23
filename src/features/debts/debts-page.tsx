@@ -28,6 +28,7 @@ function DebtsView({
     <main className="page-wrap debts-page-wrap flex flex-1 flex-col gap-3 px-3 pb-4">
       <DebtsSummaryColumn
         debts={data.debts}
+        expenses={data.expenses}
         recurringPayments={data.recurringPayments}
         defaultCurrency={defaultCurrency}
       />
