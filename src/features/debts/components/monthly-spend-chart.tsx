@@ -12,7 +12,7 @@ import type { Debt, Expense, RecurringPayment } from '@/lib/finance'
  * most" without comparing S/ against $.
  */
 const WIDTH = 700
-const HEIGHT = 150
+const HEIGHT = 180
 const PAD_X = 8
 const PAD_TOP = 16
 const PAD_BOTTOM = 24
@@ -133,7 +133,7 @@ export function MonthlySpendChart({
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
-        className="h-[150px] w-full"
+        className="h-[180px] w-full"
         role="img"
         aria-label={`Daily spending for ${monthLabel}`}
       >

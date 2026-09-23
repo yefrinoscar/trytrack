@@ -60,7 +60,7 @@ export function DebtsSummaryColumn({
 
   return (
     <div className="w-full rounded-[1.1rem] border border-border bg-card p-3 sm:p-3.5">
-      <div className="grid gap-3 lg:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="min-w-0">
           <div className="mb-2">
             <p className="eyebrow">Overview</p>
@@ -76,120 +76,129 @@ export function DebtsSummaryColumn({
           />
         </div>
 
-        <div className="grid min-w-0 gap-2 lg:grid-cols-3">
-          <div className="rounded-lg bg-muted p-2.5">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-foreground-faint mb-2">
-              Monthly Payments
-            </p>
-            <div className="max-h-32 space-y-1.5 overflow-y-auto pr-1 text-xs">
-              {debts.length ? (
-                debts.map((debt) => {
-                  const monthlyPayment = getDebtPlannedPayment(debt)
-                  return (
-                    <div key={debt.id} className="flex justify-between">
-                      <span className="text-muted-foreground truncate mr-2">
-                        {debt.name}
-                      </span>
-                      <AnimatedCurrencyValue
-                        className="font-mono whitespace-nowrap text-warning"
-                        currency={debt.currency}
-                        value={monthlyPayment}
-                      />
-                    </div>
-                  )
-                })
-              ) : (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">No debts</span>
-                  <span className="font-mono text-foreground">--</span>
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Stacked, not side by side: three narrow columns left the lists
+            squeezed and the panels stretched with empty space below. */}
+        <div className="flex min-w-0 flex-col gap-2">
+          <SummaryPanel
+            title="Monthly debt payments"
+            empty={!debts.length ? 'No debts' : null}
+          >
+            {debts.map((debt) => (
+              <SummaryRow
+                key={debt.id}
+                label={debt.name}
+                currency={debt.currency}
+                value={getDebtPlannedPayment(debt)}
+                valueClassName="text-warning"
+              />
+            ))}
+          </SummaryPanel>
 
-          <div className="rounded-lg bg-muted p-2.5">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-foreground-faint mb-2">
-              Recurring Payments Detail
-            </p>
-            <div className="max-h-32 space-y-1.5 overflow-y-auto pr-1 text-xs">
-              {activeRecurringPayments.length ? (
-                activeRecurringPayments.map((payment) => (
-                  <div key={payment.id} className="flex justify-between">
-                    <span className="text-muted-foreground truncate mr-2">
-                      {payment.name}
-                    </span>
+          <SummaryPanel
+            title="Recurring payments"
+            empty={
+              !activeRecurringPayments.length ? 'No recurring payments' : null
+            }
+          >
+            {activeRecurringPayments.map((payment) => (
+              <SummaryRow
+                key={payment.id}
+                label={payment.name}
+                currency={payment.currency}
+                value={payment.amount}
+                valueClassName="text-success"
+              />
+            ))}
+          </SummaryPanel>
+
+          <SummaryPanel
+            title="Combined monthly"
+            empty={!overviewByCurrency.length ? 'No data' : null}
+          >
+            {overviewByCurrency.map(([currency, totals]) => (
+              <div
+                key={currency}
+                className="rounded-md border border-border bg-card px-2.5 py-2"
+              >
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground-faint">
+                  {currency}
+                </p>
+                <div className="space-y-1">
+                  <SummaryRow
+                    label="Debt"
+                    currency={currency}
+                    value={totals.debtMonthly}
+                  />
+                  <SummaryRow
+                    label="Recurring"
+                    currency={currency}
+                    value={totals.recurringMonthly}
+                  />
+                  <div className="flex items-baseline justify-between border-t border-border pt-1 font-semibold">
+                    <span className="text-foreground">Total</span>
                     <AnimatedCurrencyValue
-                      className="font-mono whitespace-nowrap text-success"
-                      currency={payment.currency}
-                      value={payment.amount}
+                      className="font-mono whitespace-nowrap text-warning"
+                      currency={currency}
+                      value={totals.debtMonthly + totals.recurringMonthly}
                     />
                   </div>
-                ))
-              ) : (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    No recurring payments
-                  </span>
-                  <span className="font-mono text-foreground">--</span>
                 </div>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-lg bg-muted p-2.5">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-foreground-faint mb-2">
-              Combined Overview
-            </p>
-            <div className="max-h-32 space-y-2 overflow-y-auto pr-1 text-xs">
-              {overviewByCurrency.length ? (
-                overviewByCurrency.map(([currency, totals]) => (
-                  <div
-                    key={currency}
-                    className="rounded-md border border-border bg-card px-2.5 py-2"
-                  >
-                    <div className="mb-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground-faint">
-                        {currency === 'PEN' ? 'Soles (PEN)' : currency}
-                      </p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Debt</span>
-                        <AnimatedCurrencyValue
-                          className="font-mono text-foreground"
-                          currency={currency}
-                          value={totals.debtMonthly}
-                        />
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Recurring</span>
-                        <AnimatedCurrencyValue
-                          className="font-mono text-foreground"
-                          currency={currency}
-                          value={totals.recurringMonthly}
-                        />
-                      </div>
-                      <div className="flex justify-between border-t border-border pt-1.5 font-semibold">
-                        <span className="text-foreground">Total</span>
-                        <AnimatedCurrencyValue
-                          className="font-mono text-warning"
-                          currency={currency}
-                          value={totals.debtMonthly + totals.recurringMonthly}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">No data</span>
-                  <span className="font-mono text-foreground">--</span>
-                </div>
-              )}
-            </div>
-          </div>
+              </div>
+            ))}
+          </SummaryPanel>
         </div>
       </div>
+    </div>
+  )
+}
+
+function SummaryPanel({
+  title,
+  empty,
+  children,
+}: {
+  title: string
+  empty: string | null
+  children: React.ReactNode
+}) {
+  return (
+    <div className="rounded-lg bg-muted p-2.5">
+      <p className="mb-2 text-[10px] uppercase tracking-[0.12em] text-foreground-faint">
+        {title}
+      </p>
+      <div className="space-y-1.5 text-xs">
+        {empty ? (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">{empty}</span>
+            <span className="font-mono text-foreground">--</span>
+          </div>
+        ) : (
+          children
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SummaryRow({
+  label,
+  currency,
+  value,
+  valueClassName = 'text-foreground',
+}: {
+  label: string
+  currency: string
+  value: number
+  valueClassName?: string
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="min-w-0 truncate text-muted-foreground">{label}</span>
+      <AnimatedCurrencyValue
+        className={`font-mono whitespace-nowrap ${valueClassName}`}
+        currency={currency}
+        value={value}
+      />
     </div>
   )
 }
