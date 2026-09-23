@@ -8,14 +8,12 @@ interface DebtsSummaryColumnProps {
   debts: Debt[]
   expenses: Expense[]
   recurringPayments: RecurringPayment[]
-  defaultCurrency: string
 }
 
 export function DebtsSummaryColumn({
   debts,
   expenses,
   recurringPayments,
-  defaultCurrency,
 }: DebtsSummaryColumnProps) {
   const activeRecurringPayments = useMemo(
     () => recurringPayments.filter((payment) => payment.status === 'active'),
@@ -71,7 +69,7 @@ export function DebtsSummaryColumn({
             </h2>
           </div>
 
-          <MonthlySpendChart currency={defaultCurrency} expenses={expenses} />
+          <MonthlySpendChart expenses={expenses} />
         </div>
 
         <div className="grid min-w-0 gap-2 lg:grid-cols-3">

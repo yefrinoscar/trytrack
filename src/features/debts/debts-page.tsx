@@ -30,7 +30,6 @@ function DebtsView({
         debts={data.debts}
         expenses={data.expenses}
         recurringPayments={data.recurringPayments}
-        defaultCurrency={defaultCurrency}
       />
 
       <section className="grid gap-3 lg:grid-cols-3">
