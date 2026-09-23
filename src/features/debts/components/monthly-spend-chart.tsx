@@ -12,10 +12,10 @@ import type { Debt, Expense, RecurringPayment } from '@/lib/finance'
  * most" without comparing S/ against $.
  */
 const WIDTH = 700
-const HEIGHT = 180
+const HEIGHT = 108
 const PAD_X = 8
-const PAD_TOP = 16
-const PAD_BOTTOM = 24
+const PAD_TOP = 10
+const PAD_BOTTOM = 18
 
 function buildPath(points: Array<{ x: number; y: number }>) {
   if (!points.length) {
@@ -112,15 +112,15 @@ export function MonthlySpendChart({
 
   return (
     <div>
-      <div className="mb-1">
+      <div className="mb-0.5">
         <p className="text-xs uppercase tracking-[0.12em] text-foreground-faint">
           Daily spending · {monthLabel}
         </p>
-        <p className="mt-1 font-mono text-lg text-foreground">
+        <p className="mt-0.5 font-mono text-base text-foreground">
           {currency ? formatCurrency(total, currency) : '—'}
         </p>
         {outflow.otherCurrencies.length ? (
-          <p className="mt-0.5 text-[11px] text-foreground-faint">
+          <p className="text-[10px] text-foreground-faint">
             plus{' '}
             {outflow.otherCurrencies
               .map((item) => formatCurrency(item.total, item.currency))
@@ -133,7 +133,7 @@ export function MonthlySpendChart({
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
-        className="h-[180px] w-full"
+        className="h-[108px] w-full"
         role="img"
         aria-label={`Daily spending for ${monthLabel}`}
       >
@@ -176,7 +176,7 @@ export function MonthlySpendChart({
         <span>{daysElapsed}</span>
       </div>
 
-      <p className="mt-2 text-xs text-foreground-faint">
+      <p className="mt-1.5 text-[11px] text-foreground-faint">
         {currency && peak.day > 0 ? (
           <>
             Most spent on{' '}

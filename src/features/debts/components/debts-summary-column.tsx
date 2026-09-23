@@ -59,12 +59,12 @@ export function DebtsSummaryColumn({
   }, [activeRecurringPayments, debts])
 
   return (
-    <div className="w-full rounded-[1.1rem] border border-border bg-card p-3 sm:p-3.5">
-      <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+    <div className="w-full rounded-[1.1rem] border border-border bg-card p-2.5 sm:p-3">
+      <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="min-w-0">
-          <div className="mb-2">
+          <div className="mb-1.5">
             <p className="eyebrow">Overview</p>
-            <h2 className="mt-1 text-base font-semibold tracking-tight text-foreground">
+            <h2 className="mt-0.5 text-sm font-semibold tracking-tight text-foreground">
               Summary
             </h2>
           </div>
@@ -78,7 +78,7 @@ export function DebtsSummaryColumn({
 
         {/* Stacked, not side by side: three narrow columns left the lists
             squeezed and the panels stretched with empty space below. */}
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <SummaryPanel
             title="Monthly debt payments"
             empty={!debts.length ? 'No debts' : null}
@@ -118,7 +118,7 @@ export function DebtsSummaryColumn({
             {overviewByCurrency.map(([currency, totals]) => (
               <div
                 key={currency}
-                className="rounded-md border border-border bg-card px-2.5 py-2"
+                className="rounded-md border border-border bg-card px-2 py-1.5"
               >
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground-faint">
                   {currency}
@@ -162,11 +162,11 @@ function SummaryPanel({
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg bg-muted p-2.5">
-      <p className="mb-2 text-[10px] uppercase tracking-[0.12em] text-foreground-faint">
+    <div className="rounded-lg bg-muted p-2">
+      <p className="mb-1.5 text-[10px] uppercase tracking-[0.12em] text-foreground-faint">
         {title}
       </p>
-      <div className="space-y-1.5 text-xs">
+      <div className="space-y-1 text-xs">
         {empty ? (
           <div className="flex justify-between">
             <span className="text-muted-foreground">{empty}</span>
