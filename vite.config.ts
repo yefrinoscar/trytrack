@@ -78,7 +78,12 @@ export default defineConfig({
     ? [viteReact()]
     : [
         ...(isServe ? [devtools()] : []),
-        tanstackStart(),
+        tanstackStart({
+          router: {
+            // Keep co-located *.test.ts files out of the generated route tree.
+            routeFileIgnorePattern: '\\.test\\.tsx?$',
+          },
+        }),
         viteReact(),
         tailwindcss(),
         nitro(

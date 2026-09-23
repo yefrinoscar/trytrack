@@ -410,6 +410,53 @@ export function expenseFingerprint(value: Record<string, any>) {
   ].join('|')
 }
 
+/**
+ * Identity of a recurring payment used to merge the database and any rows a
+ * browser still has in localStorage.
+ */
+export function recurringPaymentFingerprint(value: Record<string, any>) {
+  return [
+    String(value.name ?? '')
+      .trim()
+      .toLowerCase(),
+    String(value.currency ?? '').toUpperCase(),
+    Number(value.amount ?? 0).toFixed(2),
+    String(value.startDate ?? ''),
+  ].join('|')
+}
+
+/** Demo rows shipped in `seedData`; never migrate these to the database. */
+const SEED_RECURRING_IDS = new Set([
+  'recurring-netflix',
+  'recurring-spotify',
+  'recurring-phone',
+])
+
+/**
+ * Maps a `recurring_payments` row from D1 onto the dashboard shape.
+ * Recurring payments live in the database so the public API is visible too.
+ */
+export function toRecurringPaymentFromRow(
+  value: Doc<'recurringPayments'>,
+): RecurringPayment {
+  return {
+    id: value._id,
+    name: value.name,
+    category: value.category,
+    amount: value.amount,
+    currency: value.currency,
+    cadence: 'monthly',
+    dueDay: value.dueDay,
+    status: value.status,
+    startDate: value.startDate,
+    ...(value.endDate ? { endDate: value.endDate } : {}),
+    createdAt: new Date(value.createdAt).toISOString(),
+    ...(value.updatedAt
+      ? { updatedAt: new Date(value.updatedAt).toISOString() }
+      : {}),
+  }
+}
+
 function normalizeDebtInstallments(value: number) {
   return Math.max(1, Math.round(value))
 }
@@ -1012,10 +1059,60 @@ export function useFinanceDashboard(enabled = true) {
         }
       }
 
+      // Recurring payments work the same way, but the demo rows that ship in
+      // seedData are never migrated.
+      let recurringRows = await apiClient.query(
+        api.recurringPayments.listByUser,
+        { userId: user._id },
+      )
+      const localRecurring = localData.recurringPayments.filter(
+        (payment) => !SEED_RECURRING_IDS.has(payment.id),
+      )
+
+      if (localRecurring.length) {
+        const knownRecurring = new Set(
+          recurringRows.map((row: Doc<'recurringPayments'>) =>
+            recurringPaymentFingerprint(row),
+          ),
+        )
+        const missingRecurring = localRecurring.filter(
+          (payment) =>
+            !knownRecurring.has(recurringPaymentFingerprint(payment)),
+        )
+
+        if (missingRecurring.length) {
+          await Promise.all(
+            missingRecurring.map((payment) =>
+              apiClient.mutation(api.recurringPayments.create, {
+                userId: user._id,
+                name: payment.name,
+                category: payment.category,
+                currency: payment.currency,
+                amount: payment.amount,
+                dueDay: payment.dueDay,
+                startDate: payment.startDate,
+                ...(payment.endDate ? { endDate: payment.endDate } : {}),
+                status: payment.status,
+              }),
+            ),
+          )
+
+          recurringRows = await apiClient.query(
+            api.recurringPayments.listByUser,
+            { userId: user._id },
+          )
+        }
+
+        await writeDashboardData({ ...localData, recurringPayments: [] })
+      }
+
       return {
         ...localData,
         expenses: expenseRows.map((row: Doc<'expenses'>) =>
           toExpenseFromRow(row),
+        ),
+        recurringPayments: recurringRows.map((row: Doc<'recurringPayments'>) =>
+          toRecurringPaymentFromRow(row),
         ),
         emailExpenseImports: emailExpenseImports.map((item: any) => ({
           id: item._id,
@@ -1845,59 +1942,68 @@ export function useFinanceActions() {
 
   const createRecurringPaymentMutation = useMutation({
     mutationFn: async (input: CreateRecurringPaymentInput) => {
-      return updateDashboardDataFromCache((current) => ({
-        ...current,
-        recurringPayments: [
-          {
-            ...input,
-            currency:
-              getValidCurrencyCodeOrNull(input.currency) ??
-              current.settings.currency,
-            id: createId('recurring'),
-            cadence: 'monthly',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          ...current.recurringPayments,
-        ],
-      }))
+      const localData = await readDashboardData()
+      const user = await getOrCreateAppUser(
+        apiClient,
+        localData.settings.currency,
+      )
+
+      await apiClient.mutation(api.recurringPayments.create, {
+        userId: user._id,
+        name: input.name,
+        category: input.category,
+        currency:
+          getValidCurrencyCodeOrNull(input.currency) ??
+          localData.settings.currency,
+        amount: input.amount,
+        dueDay: input.dueDay,
+        startDate: input.startDate,
+        ...(input.endDate ? { endDate: input.endDate } : {}),
+        status: input.status,
+      })
+
+      return null
     },
-    onSuccess: syncCache,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
+    },
   })
 
   const updateRecurringPaymentMutation = useMutation({
     mutationFn: async ({ id, value }: UpdateRecurringPaymentInput) => {
-      return updateDashboardDataFromCache((current) => ({
-        ...current,
-        recurringPayments: current.recurringPayments.map((p) =>
-          p.id === id
-            ? {
-                ...p,
-                ...value,
-                ...(value.currency
-                  ? {
-                      currency:
-                        getValidCurrencyCodeOrNull(value.currency) ??
-                        current.settings.currency,
-                    }
-                  : {}),
-                updatedAt: new Date().toISOString(),
-              }
-            : p,
-        ),
-      }))
+      const currencyCode = value.currency
+        ? getValidCurrencyCodeOrNull(value.currency)
+        : null
+
+      await apiClient.mutation(api.recurringPayments.update, {
+        id,
+        ...(value.name !== undefined ? { name: value.name } : {}),
+        ...(value.category !== undefined ? { category: value.category } : {}),
+        ...(currencyCode ? { currency: currencyCode } : {}),
+        ...(value.amount !== undefined ? { amount: value.amount } : {}),
+        ...(value.dueDay !== undefined ? { dueDay: value.dueDay } : {}),
+        ...(value.startDate !== undefined
+          ? { startDate: value.startDate }
+          : {}),
+        ...(value.endDate !== undefined ? { endDate: value.endDate } : {}),
+        ...(value.status !== undefined ? { status: value.status } : {}),
+      })
+
+      return null
     },
-    onSuccess: syncCache,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
+    },
   })
 
   const removeRecurringPaymentMutation = useMutation({
     mutationFn: async (id: string) => {
-      return updateDashboardDataFromCache((current) => ({
-        ...current,
-        recurringPayments: current.recurringPayments.filter((p) => p.id !== id),
-      }))
+      await apiClient.mutation(api.recurringPayments.remove, { id })
+      return null
     },
-    onSuccess: syncCache,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
+    },
   })
 
   const updateSettingsMutation = useMutation({
