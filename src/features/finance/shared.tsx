@@ -392,10 +392,12 @@ export function DebtProjectionChart({
   }
 
   const width = 700
-  const height = compact ? 58 : 80
+  // Tall enough that the payoff curve reads as a curve: at 58px the whole
+  // range collapsed into ~32px of drawable height and looked flat.
+  const height = compact ? 132 : 180
   const paddingX = 10
-  const paddingTop = compact ? 8 : 12
-  const paddingBottom = compact ? 18 : 26
+  const paddingTop = 14
+  const paddingBottom = 26
   const maxBalance = Math.max(
     ...normalizedSeries.flatMap((item) =>
       item.points.map((point) => point.balance),
@@ -408,18 +410,22 @@ export function DebtProjectionChart({
     {
       line: 'stroke-violet-500',
       fill: 'fill-violet-500',
-      marker: 'fill-violet-400',
+      dot: 'bg-violet-400',
     },
     {
       line: 'stroke-emerald-400',
       fill: 'fill-emerald-400',
-      marker: 'fill-emerald-300',
+      dot: 'bg-emerald-400',
     },
-    { line: 'stroke-sky-400', fill: 'fill-sky-400', marker: 'fill-sky-300' },
+    {
+      line: 'stroke-sky-400',
+      fill: 'fill-sky-400',
+      dot: 'bg-sky-400',
+    },
     {
       line: 'stroke-amber-400',
       fill: 'fill-amber-400',
-      marker: 'fill-amber-300',
+      dot: 'bg-amber-400',
     },
   ] as const
   const seriesChart = normalizedSeries.map((seriesItem, seriesIndex) => {
@@ -516,7 +522,8 @@ export function DebtProjectionChart({
       >
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          className={`w-full ${compact ? 'h-[58px]' : 'h-[80px]'}`}
+          preserveAspectRatio="none"
+          className={`w-full ${compact ? 'h-[132px]' : 'h-[180px]'}`}
           role="img"
         >
           {[0.25, 0.5, 0.75].map((ratio) => (
@@ -525,12 +532,14 @@ export function DebtProjectionChart({
               d={`M ${paddingX} ${paddingTop + ratio * (height - paddingTop - paddingBottom)} H ${width - paddingX}`}
               className="stroke-border"
               strokeDasharray="2 6"
+              vectorEffect="non-scaling-stroke"
             />
           ))}
           <path
             d={`M ${paddingX} ${height - paddingBottom} H ${width - paddingX}`}
             className="stroke-violet-500"
             strokeOpacity="0.3"
+            vectorEffect="non-scaling-stroke"
           />
           {seriesChart[0]?.areaPath ? (
             <path
@@ -546,15 +555,8 @@ export function DebtProjectionChart({
                 fill="none"
                 className={seriesItem.colors.line}
                 strokeWidth="2.5"
+                vectorEffect="non-scaling-stroke"
               />
-              {seriesItem.activePoint ? (
-                <circle
-                  cx={seriesItem.activePoint.x}
-                  cy={seriesItem.activePoint.y}
-                  className={seriesItem.colors.marker}
-                  r="4.5"
-                />
-              ) : null}
             </g>
           ))}
           {seriesChart[0]?.activePoint ? (
@@ -563,9 +565,23 @@ export function DebtProjectionChart({
               className="stroke-violet-300"
               strokeOpacity="0.4"
               strokeDasharray="4 6"
+              vectorEffect="non-scaling-stroke"
             />
           ) : null}
         </svg>
+        {seriesChart.map((seriesItem) =>
+          seriesItem.activePoint ? (
+            <span
+              key={`dot-${seriesItem.currency}`}
+              aria-hidden="true"
+              className={`pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${seriesItem.colors.dot}`}
+              style={{
+                left: `${(seriesItem.activePoint.x / width) * 100}%`,
+                top: `${(seriesItem.activePoint.y / height) * 100}%`,
+              }}
+            />
+          ) : null,
+        )}
         <div
           className="absolute inset-0 grid"
           style={{
