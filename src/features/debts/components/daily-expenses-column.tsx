@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -1191,12 +1192,17 @@ export function DailyExpensesColumn({
                     <p className="truncate text-sm font-medium text-foreground">
                       {expense.description}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {expense.spentAt} · {expense.category}
-                    </p>
+                    <div className="mt-1.5 flex min-w-0 items-center gap-2">
+                      <Badge className="shrink-0 px-2 py-0.5 text-[10px]">
+                        {expense.category}
+                      </Badge>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {expense.spentAt}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm text-foreground">
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="whitespace-nowrap font-mono text-sm text-foreground">
                       {formatCurrency(expense.amount, expense.currency)}
                     </span>
                     <Button
