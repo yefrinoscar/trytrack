@@ -2465,7 +2465,10 @@ export function getDebtProjection(
 
     points.push({
       monthIndex,
-      label: pointDate.toLocaleDateString('en-US', { month: 'short' }),
+      label: pointDate.toLocaleDateString('en-US', {
+        month: 'short',
+        year: '2-digit',
+      }),
       balance: totalBalance(),
     })
 

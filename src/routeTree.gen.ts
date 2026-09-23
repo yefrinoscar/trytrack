@@ -20,6 +20,7 @@ import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DebtsRouteImport } from './routes/debts'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiV1RecurringPaymentsRouteImport } from './routes/api/v1/recurring-payments'
 import { Route as ApiV1ExpensesRouteImport } from './routes/api/v1/expenses'
 import { Route as ApiEmailInboundRouteImport } from './routes/api/email/inbound'
 import { Route as ApiEmailBackfillRouteImport } from './routes/api/email/backfill'
@@ -84,6 +85,11 @@ const DebtsRoute = DebtsRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1RecurringPaymentsRoute = ApiV1RecurringPaymentsRouteImport.update({
+  id: '/api/v1/recurring-payments',
+  path: '/api/v1/recurring-payments',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1ExpensesRoute = ApiV1ExpensesRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
   '/api/v1/expenses': typeof ApiV1ExpensesRoute
+  '/api/v1/recurring-payments': typeof ApiV1RecurringPaymentsRoute
   '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
   '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
   '/api/v1/expenses': typeof ApiV1ExpensesRoute
+  '/api/v1/recurring-payments': typeof ApiV1RecurringPaymentsRoute
   '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
   '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/api/email/backfill': typeof ApiEmailBackfillRoute
   '/api/email/inbound': typeof ApiEmailInboundRoute
   '/api/v1/expenses': typeof ApiV1ExpensesRoute
+  '/api/v1/recurring-payments': typeof ApiV1RecurringPaymentsRoute
   '/api/email/gmail/callback': typeof ApiEmailGmailCallbackRoute
   '/api/email/gmail/connect': typeof ApiEmailGmailConnectRoute
   '/api/email/gmail/poll': typeof ApiEmailGmailPollRoute
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/api/email/backfill'
     | '/api/email/inbound'
     | '/api/v1/expenses'
+    | '/api/v1/recurring-payments'
     | '/api/email/gmail/callback'
     | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/api/email/backfill'
     | '/api/email/inbound'
     | '/api/v1/expenses'
+    | '/api/v1/recurring-payments'
     | '/api/email/gmail/callback'
     | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/api/email/backfill'
     | '/api/email/inbound'
     | '/api/v1/expenses'
+    | '/api/v1/recurring-payments'
     | '/api/email/gmail/callback'
     | '/api/email/gmail/connect'
     | '/api/email/gmail/poll'
@@ -295,6 +307,7 @@ export interface RootRouteChildren {
   ApiEmailBackfillRoute: typeof ApiEmailBackfillRoute
   ApiEmailInboundRoute: typeof ApiEmailInboundRoute
   ApiV1ExpensesRoute: typeof ApiV1ExpensesRoute
+  ApiV1RecurringPaymentsRoute: typeof ApiV1RecurringPaymentsRoute
   ApiEmailGmailCallbackRoute: typeof ApiEmailGmailCallbackRoute
   ApiEmailGmailConnectRoute: typeof ApiEmailGmailConnectRoute
   ApiEmailGmailPollRoute: typeof ApiEmailGmailPollRoute
@@ -380,6 +393,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/recurring-payments': {
+      id: '/api/v1/recurring-payments'
+      path: '/api/v1/recurring-payments'
+      fullPath: '/api/v1/recurring-payments'
+      preLoaderRoute: typeof ApiV1RecurringPaymentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/v1/expenses': {
@@ -471,6 +491,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiEmailBackfillRoute: ApiEmailBackfillRoute,
   ApiEmailInboundRoute: ApiEmailInboundRoute,
   ApiV1ExpensesRoute: ApiV1ExpensesRoute,
+  ApiV1RecurringPaymentsRoute: ApiV1RecurringPaymentsRoute,
   ApiEmailGmailCallbackRoute: ApiEmailGmailCallbackRoute,
   ApiEmailGmailConnectRoute: ApiEmailGmailConnectRoute,
   ApiEmailGmailPollRoute: ApiEmailGmailPollRoute,

@@ -5,7 +5,13 @@ import {
   removeMatchingForApi,
 } from '#/server/api/expenses'
 import { findUserByEmail } from '#/server/api/users'
-import { getEnv } from '#/server/env'
+import {
+  API_DISABLED_MESSAGE,
+  asTrimmedString,
+  isApiAuthorized,
+  isApiKeyConfigured,
+  jsonResponse as json,
+} from '#/server/api-key'
 
 /**
  * Public API to register an expense from outside the browser session.
@@ -41,37 +47,6 @@ type Payload = {
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 const CURRENCY_PATTERN = /^[A-Za-z]{3}$/
 
-function isAuthorized(request: Request) {
-  const expected = getEnv('EXPENSES_API_KEY')
-  if (!expected) {
-    return false
-  }
-
-  const header = request.headers.get('authorization') ?? ''
-  const provided = header.startsWith('Bearer ') ? header.slice(7) : ''
-  if (!provided) {
-    return false
-  }
-
-  // Constant-time-ish comparison: avoids trivially leaking length differences.
-  if (provided.length !== expected.length) {
-    return false
-  }
-  let diff = 0
-  for (let i = 0; i < provided.length; i += 1) {
-    diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i)
-  }
-  return diff === 0
-}
-
-function json(body: unknown, status = 200) {
-  return Response.json(body, { status })
-}
-
-function asTrimmedString(value: unknown) {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
 export async function handleCreateExpense(request: Request) {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204 })
@@ -81,17 +56,11 @@ export async function handleCreateExpense(request: Request) {
     return json({ error: 'Method not allowed. Use POST.' }, 405)
   }
 
-  if (!getEnv('EXPENSES_API_KEY')) {
-    return json(
-      {
-        error:
-          'The expense API is disabled: EXPENSES_API_KEY is not configured.',
-      },
-      503,
-    )
+  if (!isApiKeyConfigured()) {
+    return json({ error: API_DISABLED_MESSAGE }, 503)
   }
 
-  if (!isAuthorized(request)) {
+  if (!isApiAuthorized(request)) {
     return json({ error: 'Unauthorized.' }, 401)
   }
 
@@ -164,17 +133,11 @@ export async function handleDeleteExpense(request: Request) {
     return new Response(null, { status: 204 })
   }
 
-  if (!getEnv('EXPENSES_API_KEY')) {
-    return json(
-      {
-        error:
-          'The expense API is disabled: EXPENSES_API_KEY is not configured.',
-      },
-      503,
-    )
+  if (!isApiKeyConfigured()) {
+    return json({ error: API_DISABLED_MESSAGE }, 503)
   }
 
-  if (!isAuthorized(request)) {
+  if (!isApiAuthorized(request)) {
     return json({ error: 'Unauthorized.' }, 401)
   }
 

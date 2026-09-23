@@ -14,6 +14,7 @@ import type { FinanceActions } from '@/features/finance/shared'
 import { parseMoney } from '@/features/finance/shared'
 import { formatCurrency } from '@/lib/finance'
 import type { EmailExpenseImport, Expense } from '@/lib/finance'
+import { categoryTagClass } from '@/lib/category-colors'
 import { cn } from '@/lib/utils'
 
 interface DailyExpensesColumnProps {
@@ -1193,7 +1194,12 @@ export function DailyExpensesColumn({
                       {expense.description}
                     </p>
                     <div className="mt-1.5 flex min-w-0 items-center gap-2">
-                      <Badge className="shrink-0 px-2 py-0.5 text-[10px]">
+                      <Badge
+                        className={cn(
+                          'shrink-0 px-2 py-0.5 text-[10px]',
+                          categoryTagClass(expense.category),
+                        )}
+                      >
                         {expense.category}
                       </Badge>
                       <span className="truncate text-xs text-muted-foreground">

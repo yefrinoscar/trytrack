@@ -454,6 +454,9 @@ export function DebtProjectionChart({
     seriesChart[0]?.activePoint.monthIndex === 0
       ? 'Now'
       : (seriesChart[0]?.activePoint.label ?? 'Now')
+  const lastPoint = seriesChart[0]?.points.at(-1)
+  const isPaidOff = Boolean(lastPoint && lastPoint.balance === 0)
+  const monthsRemaining = lastPoint?.monthIndex ?? 0
 
   function setIndexFromClientX(clientX: number) {
     const overlay = overlayRef.current
@@ -516,6 +519,14 @@ export function DebtProjectionChart({
           className={`w-full ${compact ? 'h-[58px]' : 'h-[80px]'}`}
           role="img"
         >
+          {[0.25, 0.5, 0.75].map((ratio) => (
+            <path
+              key={ratio}
+              d={`M ${paddingX} ${paddingTop + ratio * (height - paddingTop - paddingBottom)} H ${width - paddingX}`}
+              className="stroke-border"
+              strokeDasharray="2 6"
+            />
+          ))}
           <path
             d={`M ${paddingX} ${height - paddingBottom} H ${width - paddingX}`}
             className="stroke-violet-500"
@@ -582,6 +593,24 @@ export function DebtProjectionChart({
           </span>
         ))}
       </div>
+      {isPaidOff ? (
+        <p
+          className={`text-xs text-foreground-faint ${compact ? 'mt-1' : 'mt-2'}`}
+        >
+          Debt-free by{' '}
+          <span className="font-medium text-foreground">
+            {lastPoint?.label}
+          </span>
+          {' · '}
+          {monthsRemaining} {monthsRemaining === 1 ? 'month' : 'months'}
+        </p>
+      ) : (
+        <p
+          className={`text-xs text-foreground-faint ${compact ? 'mt-1' : 'mt-2'}`}
+        >
+          Not paid off within the projection window.
+        </p>
+      )}
     </div>
   )
 }
