@@ -23,6 +23,21 @@
   --success: #74c48b;
   --warning: #d3a45f;
   --danger: #df7d72;
+  /* Category tag colours: bright enough to read on the dark surface. */
+  --cat-emerald: #6ee7b7;
+  --cat-lime: #bef264;
+  --cat-sky: #7dd3fc;
+  --cat-violet: #c4b5fd;
+  --cat-amber: #fcd34d;
+  --cat-fuchsia: #f0abfc;
+  --cat-pink: #f9a8d4;
+  --cat-cyan: #67e8f9;
+  --cat-indigo: #a5b4fc;
+  --cat-orange: #fdba74;
+  --cat-rose: #fda4af;
+  --cat-blue: #93c5fd;
+  --cat-teal: #5eead4;
+  --cat-neutral: #9a9a9a;
   --card: var(--panel);
   --card-foreground: var(--foreground);
   --popover: var(--panel-elevated);
@@ -59,6 +74,22 @@
   --success: #4b8d67;
   --warning: #b77b2d;
   --danger: #c16059;
+  /* Category tag colours: dark enough to read on the cream surface.
+     Chosen so every tag clears the 4.5:1 contrast bar (WCAG AA). */
+  --cat-emerald: #065f46;
+  --cat-lime: #3f6212;
+  --cat-sky: #0369a1;
+  --cat-violet: #6d28d9;
+  --cat-amber: #92400e;
+  --cat-fuchsia: #a21caf;
+  --cat-pink: #9d174d;
+  --cat-cyan: #155e75;
+  --cat-indigo: #4338ca;
+  --cat-orange: #9a3412;
+  --cat-rose: #be123c;
+  --cat-blue: #1d4ed8;
+  --cat-teal: #115e59;
+  --cat-neutral: #63584d;
   --card: var(--panel);
   --card-foreground: var(--foreground);
   --popover: var(--panel-elevated);
@@ -334,4 +365,25 @@ body::-webkit-scrollbar-corner,
 
 :root[data-motion='reduced'] .shell-route-enter {
   animation: none;
+}
+
+/*
+ * Category tags. The colour comes from `--cat-color`, which each theme maps to
+ * a shade that stays readable on its own surface, so one class works in both
+ * light and dark mode.
+ */
+.category-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--cat-color) 35%, transparent);
+  background: color-mix(in srgb, var(--cat-color) 14%, transparent);
+  color: var(--cat-color);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  text-transform: uppercase;
+  white-space: nowrap;
 }

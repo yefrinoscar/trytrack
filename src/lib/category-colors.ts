@@ -1,50 +1,50 @@
 /**
- * Colour classes for expense/recurring category tags.
+ * Maps a category to the CSS custom property that colours its tag.
  *
- * Tailwind needs the class names to exist statically, so each category maps to
- * a fixed string rather than a computed one. Unknown categories fall back to a
- * stable colour derived from the text, so a custom category still gets a tag
- * that looks intentional and never changes between renders.
+ * The actual shade lives in `styles.css` and differs per theme, so a single
+ * tag class renders readably on both the dark and the light surface. Unknown
+ * categories get a stable colour derived from the text, so a custom category
+ * always looks the same.
  */
 
-const CATEGORY_TAG_CLASSES: Record<string, string> = {
-  food: 'border-emerald-400/30 bg-emerald-400/12 text-emerald-300',
-  groceries: 'border-lime-400/30 bg-lime-400/12 text-lime-300',
-  transport: 'border-sky-400/30 bg-sky-400/12 text-sky-300',
-  health: 'border-violet-400/30 bg-violet-400/12 text-violet-300',
-  utilities: 'border-amber-400/30 bg-amber-400/12 text-amber-300',
-  shopping: 'border-fuchsia-400/30 bg-fuchsia-400/12 text-fuchsia-300',
-  entertainment: 'border-pink-400/30 bg-pink-400/12 text-pink-300',
-  software: 'border-cyan-400/30 bg-cyan-400/12 text-cyan-300',
-  education: 'border-indigo-400/30 bg-indigo-400/12 text-indigo-300',
-  home: 'border-orange-400/30 bg-orange-400/12 text-orange-300',
-  gifts: 'border-rose-400/30 bg-rose-400/12 text-rose-300',
-  transfer: 'border-blue-400/30 bg-blue-400/12 text-blue-300',
-  subscription: 'border-teal-400/30 bg-teal-400/12 text-teal-300',
-  other: 'border-border bg-muted text-muted-foreground',
+const CATEGORY_COLOR_VARS: Record<string, string> = {
+  food: '--cat-emerald',
+  groceries: '--cat-lime',
+  transport: '--cat-sky',
+  health: '--cat-violet',
+  utilities: '--cat-amber',
+  shopping: '--cat-fuchsia',
+  entertainment: '--cat-pink',
+  software: '--cat-cyan',
+  education: '--cat-indigo',
+  home: '--cat-orange',
+  gifts: '--cat-rose',
+  transfer: '--cat-blue',
+  subscription: '--cat-teal',
+  other: '--cat-neutral',
 }
 
 /** Used when a category is not in the list above. */
-const FALLBACK_TAG_CLASSES = [
-  'border-sky-400/30 bg-sky-400/12 text-sky-300',
-  'border-emerald-400/30 bg-emerald-400/12 text-emerald-300',
-  'border-amber-400/30 bg-amber-400/12 text-amber-300',
-  'border-violet-400/30 bg-violet-400/12 text-violet-300',
-  'border-rose-400/30 bg-rose-400/12 text-rose-300',
-  'border-cyan-400/30 bg-cyan-400/12 text-cyan-300',
-  'border-orange-400/30 bg-orange-400/12 text-orange-300',
-  'border-fuchsia-400/30 bg-fuchsia-400/12 text-fuchsia-300',
+const FALLBACK_COLOR_VARS = [
+  '--cat-sky',
+  '--cat-emerald',
+  '--cat-amber',
+  '--cat-violet',
+  '--cat-rose',
+  '--cat-cyan',
+  '--cat-orange',
+  '--cat-fuchsia',
 ] as const
 
-export function categoryTagClass(category: string | null | undefined) {
+export function categoryColorVar(category: string | null | undefined) {
   const key = (category ?? '').trim().toLowerCase()
-  const exact = CATEGORY_TAG_CLASSES[key]
+  const exact = CATEGORY_COLOR_VARS[key]
   if (exact) {
     return exact
   }
 
   if (!key) {
-    return FALLBACK_TAG_CLASSES[0]
+    return FALLBACK_COLOR_VARS[0]
   }
 
   let hash = 0
@@ -52,5 +52,5 @@ export function categoryTagClass(category: string | null | undefined) {
     hash = (hash * 31 + key.charCodeAt(index)) >>> 0
   }
 
-  return FALLBACK_TAG_CLASSES[hash % FALLBACK_TAG_CLASSES.length]!
+  return FALLBACK_COLOR_VARS[hash % FALLBACK_COLOR_VARS.length]!
 }

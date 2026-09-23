@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -14,7 +13,7 @@ import type { FinanceActions } from '@/features/finance/shared'
 import { parseMoney } from '@/features/finance/shared'
 import { formatCurrency } from '@/lib/finance'
 import type { EmailExpenseImport, Expense } from '@/lib/finance'
-import { categoryTagClass } from '@/lib/category-colors'
+import { categoryColorVar } from '@/lib/category-colors'
 import { cn } from '@/lib/utils'
 
 interface DailyExpensesColumnProps {
@@ -1194,14 +1193,16 @@ export function DailyExpensesColumn({
                       {expense.description}
                     </p>
                     <div className="mt-1.5 flex min-w-0 items-center gap-2">
-                      <Badge
-                        className={cn(
-                          'shrink-0 px-2 py-0.5 text-[10px]',
-                          categoryTagClass(expense.category),
-                        )}
+                      <span
+                        className="category-tag shrink-0"
+                        style={
+                          {
+                            '--cat-color': `var(${categoryColorVar(expense.category)})`,
+                          } as React.CSSProperties
+                        }
                       >
                         {expense.category}
-                      </Badge>
+                      </span>
                       <span className="truncate text-xs text-muted-foreground">
                         {expense.spentAt}
                       </span>
