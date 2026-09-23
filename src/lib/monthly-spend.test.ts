@@ -1,92 +1,110 @@
 import { describe, expect, test } from 'vite-plus/test'
-import { aggregateMonthlySpend } from '#/lib/monthly-spend'
+import { aggregateMonthlyOutflow } from '#/lib/monthly-spend'
+import type { OutflowEntry } from '#/lib/monthly-spend'
 
 const reference = new Date(2026, 8, 22) // 22 Sep 2026
 
-const expense = (spentAt: string, amount: number, currency = 'PEN') => ({
-  spentAt,
-  amount,
-  currency,
-})
+const entry = (
+  date: string,
+  amount: number,
+  currency = 'PEN',
+): OutflowEntry => ({ date, amount, currency })
 
-describe('aggregateMonthlySpend', () => {
-  test('totals the month per day and finds the biggest day', () => {
-    const { series, daysElapsed, monthLabel } = aggregateMonthlySpend(
+describe('aggregateMonthlyOutflow', () => {
+  test('totals the month per day and finds the most expensive day', () => {
+    const result = aggregateMonthlyOutflow(
       [
-        expense('2026-09-14', 100),
-        expense('2026-09-14', 50),
-        expense('2026-09-02', 20),
-        expense('2026-09-21', 30),
+        entry('2026-09-14', 100),
+        entry('2026-09-14', 50),
+        entry('2026-09-02', 20),
+        entry('2026-09-21', 30),
       ],
       reference,
     )
 
-    expect(series).toHaveLength(1)
-    expect(series[0]!.currency).toBe('PEN')
-    expect(series[0]!.total).toBe(200)
-    expect(series[0]!.peak).toEqual({ day: 14, amount: 150 })
-    expect(series[0]!.byDay.get(14)).toBe(150)
-    expect(daysElapsed).toBe(22)
-    expect(monthLabel).toBe('September')
+    expect(result.currency).toBe('PEN')
+    expect(result.total).toBe(200)
+    expect(result.peak).toEqual({ day: 14, amount: 150 })
+    expect(result.byDay.get(14)).toBe(150)
+    expect(result.daysElapsed).toBe(22)
+    expect(result.monthLabel).toBe('September')
   })
 
-  test('keeps currencies apart instead of adding S/ to $', () => {
-    const { series } = aggregateMonthlySpend(
+  test('charts the busiest currency and reports the rest separately', () => {
+    const result = aggregateMonthlyOutflow(
       [
-        expense('2026-09-10', 40, 'PEN'),
-        expense('2026-09-11', 100, 'USD'),
-        expense('2026-09-11', 25, 'PEN'),
+        entry('2026-09-10', 40, 'PEN'),
+        entry('2026-09-11', 100, 'USD'),
+        entry('2026-09-11', 25, 'PEN'),
       ],
       reference,
     )
 
-    expect(series).toHaveLength(2)
-    // Sorted by total, largest first.
-    expect(series[0]!.currency).toBe('USD')
-    expect(series[0]!.total).toBe(100)
-    expect(series[1]!.currency).toBe('PEN')
-    expect(series[1]!.total).toBe(65)
-    expect(series[1]!.peak).toEqual({ day: 10, amount: 40 })
+    // USD wins on total, so it is the drawn line.
+    expect(result.currency).toBe('USD')
+    expect(result.total).toBe(100)
+    expect(result.otherCurrencies).toEqual([{ currency: 'PEN', total: 65 }])
   })
 
-  test('ignores other months', () => {
-    const { series } = aggregateMonthlySpend(
+  test('never adds S/ to $', () => {
+    const result = aggregateMonthlyOutflow(
+      [entry('2026-09-10', 100, 'PEN'), entry('2026-09-10', 100, 'USD')],
+      reference,
+    )
+
+    // Same day, two currencies: neither total may include the other, so the
+    // combined view is two 100s, never a single 200.
+    const allTotals = [
+      { currency: result.currency ?? '', total: result.total },
+      ...result.otherCurrencies,
+    ].sort((left, right) => left.currency.localeCompare(right.currency))
+
+    expect(allTotals).toEqual([
+      { currency: 'PEN', total: 100 },
+      { currency: 'USD', total: 100 },
+    ])
+  })
+
+  test('ignores other months and zero amounts', () => {
+    const result = aggregateMonthlyOutflow(
       [
-        expense('2026-09-10', 40),
-        expense('2026-08-31', 999),
-        expense('2026-10-01', 999),
+        entry('2026-09-10', 40),
+        entry('2026-08-31', 999),
+        entry('2026-10-01', 999),
+        entry('2026-09-12', 0),
       ],
       reference,
     )
 
-    expect(series).toHaveLength(1)
-    expect(series[0]!.total).toBe(40)
-    expect(series[0]!.byDay.size).toBe(1)
+    expect(result.total).toBe(40)
+    expect(result.byDay.size).toBe(1)
   })
 
-  test('returns no series when nothing was spent', () => {
-    const { series, daysElapsed } = aggregateMonthlySpend([], reference)
+  test('returns nothing when there is no movement', () => {
+    const result = aggregateMonthlyOutflow([], reference)
 
-    expect(series).toEqual([])
-    expect(daysElapsed).toBe(22)
+    expect(result.currency).toBeNull()
+    expect(result.total).toBe(0)
+    expect(result.peak).toEqual({ day: 0, amount: 0 })
+    expect(result.daysElapsed).toBe(22)
   })
 
   test('skips malformed dates instead of throwing', () => {
-    const { series } = aggregateMonthlySpend(
-      [expense('', 10), expense('not-a-date', 10), expense('2026-09-0', 10)],
+    const result = aggregateMonthlyOutflow(
+      [entry('', 10), entry('not-a-date', 10), entry('2026-09-0', 10)],
       reference,
     )
 
-    expect(series).toEqual([])
+    expect(result.currency).toBeNull()
   })
 
   test('matches the currency case-insensitively', () => {
-    const { series } = aggregateMonthlySpend(
-      [expense('2026-09-05', 12, 'pen')],
+    const result = aggregateMonthlyOutflow(
+      [entry('2026-09-05', 12, 'pen')],
       reference,
     )
 
-    expect(series[0]!.currency).toBe('PEN')
-    expect(series[0]!.total).toBe(12)
+    expect(result.currency).toBe('PEN')
+    expect(result.total).toBe(12)
   })
 })

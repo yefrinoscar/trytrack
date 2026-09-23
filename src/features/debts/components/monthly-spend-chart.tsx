@@ -1,30 +1,21 @@
 import { useMemo } from 'react'
-import { formatCurrency } from '@/lib/finance'
-import { aggregateMonthlySpend } from '@/lib/monthly-spend'
-import type { Expense } from '@/lib/finance'
+import { formatCurrency, getDebtPlannedPayment } from '@/lib/finance'
+import { aggregateMonthlyOutflow } from '@/lib/monthly-spend'
+import type { OutflowEntry } from '@/lib/monthly-spend'
+import type { Debt, Expense, RecurringPayment } from '@/lib/finance'
 
 /**
- * Daily spending for the current month, drawn as a line per currency.
+ * Everything that leaves the account this month, day by day: recorded expenses,
+ * recurring charges on their due day and debt installments on their due date.
  *
- * Every day from the 1st to today is on the axis, so the shape of the month is
- * visible, and the day with the highest spend is marked and named underneath.
+ * One line, one currency (the busiest one), so it answers "which day cost the
+ * most" without comparing S/ against $.
  */
 const WIDTH = 700
 const HEIGHT = 150
 const PAD_X = 8
 const PAD_TOP = 16
 const PAD_BOTTOM = 24
-
-const PALETTE = [
-  { line: 'stroke-violet-500', fill: 'fill-violet-500', dot: 'bg-violet-400' },
-  {
-    line: 'stroke-emerald-400',
-    fill: 'fill-emerald-400',
-    dot: 'bg-emerald-400',
-  },
-  { line: 'stroke-sky-400', fill: 'fill-sky-400', dot: 'bg-sky-400' },
-  { line: 'stroke-amber-400', fill: 'fill-amber-400', dot: 'bg-amber-400' },
-] as const
 
 function buildPath(points: Array<{ x: number; y: number }>) {
   if (!points.length) {
@@ -46,44 +37,78 @@ function buildArea(points: Array<{ x: number; y: number }>, baseline: number) {
   return `${buildPath(points)} L ${last.x} ${baseline} L ${first.x} ${baseline} Z`
 }
 
-export function MonthlySpendChart({ expenses }: { expenses: Expense[] }) {
-  const { series, daysElapsed, monthLabel } = useMemo(
-    () => aggregateMonthlySpend(expenses),
-    [expenses],
-  )
+export function MonthlySpendChart({
+  debts,
+  expenses,
+  recurringPayments,
+}: {
+  debts: Debt[]
+  expenses: Expense[]
+  recurringPayments: RecurringPayment[]
+}) {
+  const outflow = useMemo(() => {
+    const now = new Date()
+    const monthKey = String(now.getMonth() + 1).padStart(2, '0')
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    const entries: OutflowEntry[] = []
 
+    for (const expense of expenses) {
+      entries.push({
+        currency: expense.currency,
+        date: expense.spentAt,
+        amount: expense.amount,
+      })
+    }
+
+    for (const payment of recurringPayments) {
+      if (payment.status !== 'active') {
+        continue
+      }
+
+      const day = Math.min(Math.max(Math.round(payment.dueDay), 1), lastDay)
+      const date = `${now.getFullYear()}-${monthKey}-${String(day).padStart(2, '0')}`
+
+      if (date < payment.startDate) {
+        continue
+      }
+      if (payment.endDate && date > payment.endDate) {
+        continue
+      }
+
+      entries.push({
+        currency: payment.currency,
+        date,
+        amount: payment.amount,
+      })
+    }
+
+    for (const debt of debts) {
+      if (debt.status === 'closed' || debt.balance <= 0) {
+        continue
+      }
+
+      entries.push({
+        currency: debt.currency,
+        date: debt.dueDate,
+        amount: getDebtPlannedPayment(debt),
+      })
+    }
+
+    return aggregateMonthlyOutflow(entries)
+  }, [debts, expenses, recurringPayments])
+
+  const { byDay, total, peak, daysElapsed, monthLabel, currency } = outflow
+  const days = Array.from({ length: daysElapsed }, (_, index) => index + 1)
   const plotHeight = HEIGHT - PAD_TOP - PAD_BOTTOM
   const plotWidth = WIDTH - PAD_X * 2
   const baseline = PAD_TOP + plotHeight
-  const maxAmount = Math.max(
-    ...series.flatMap((item) => Array.from(item.byDay.values())),
-    1,
-  )
-
-  const days = Array.from({ length: daysElapsed }, (_, index) => index + 1)
+  const maxAmount = Math.max(...Array.from(byDay.values()), 1)
   const stepX = daysElapsed > 1 ? plotWidth / (daysElapsed - 1) : 0
-  const xForDay = (day: number) => PAD_X + (day - 1) * stepX
-  const yForAmount = (amount: number) =>
-    PAD_TOP + (1 - amount / maxAmount) * plotHeight
 
-  const chart = series.map((item, index) => {
-    // A missing day is a zero, so the line returns to the axis instead of
-    // linking two distant days with a straight line.
-    const points = days.map((day) => ({
-      x: xForDay(day),
-      y: yForAmount(item.byDay.get(day) ?? 0),
-    }))
-
-    return {
-      ...item,
-      colors: PALETTE[index % PALETTE.length]!,
-      points,
-      linePath: buildPath(points),
-      areaPath: index === 0 ? buildArea(points, baseline) : '',
-    }
-  })
-
-  const headline = series[0] ?? null
+  const points = days.map((day) => ({
+    x: PAD_X + (day - 1) * stepX,
+    y: PAD_TOP + (1 - (byDay.get(day) ?? 0) / maxAmount) * plotHeight,
+  }))
 
   return (
     <div>
@@ -91,29 +116,24 @@ export function MonthlySpendChart({ expenses }: { expenses: Expense[] }) {
         <p className="text-xs uppercase tracking-[0.12em] text-foreground-faint">
           Daily spending · {monthLabel}
         </p>
-        <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          {chart.length ? (
-            chart.map((item) => (
-              <p
-                key={item.currency}
-                className="flex items-baseline gap-2 font-mono text-sm text-foreground"
-              >
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${item.colors.dot}`}
-                />
-                {formatCurrency(item.total, item.currency)}
-              </p>
-            ))
-          ) : (
-            <p className="font-mono text-sm text-muted-foreground">—</p>
-          )}
-        </div>
+        <p className="mt-1 font-mono text-lg text-foreground">
+          {currency ? formatCurrency(total, currency) : '—'}
+        </p>
+        {outflow.otherCurrencies.length ? (
+          <p className="mt-0.5 text-[11px] text-foreground-faint">
+            plus{' '}
+            {outflow.otherCurrencies
+              .map((item) => formatCurrency(item.total, item.currency))
+              .join(', ')}{' '}
+            in another currency
+          </p>
+        ) : null}
       </div>
 
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
-        className="w-full h-[150px]"
+        className="h-[150px] w-full"
         role="img"
         aria-label={`Daily spending for ${monthLabel}`}
       >
@@ -131,29 +151,23 @@ export function MonthlySpendChart({ expenses }: { expenses: Expense[] }) {
           className="stroke-border"
           vectorEffect="non-scaling-stroke"
         />
-
-        {chart.map((item) =>
-          item.areaPath ? (
-            <path
-              key={`area-${item.currency}`}
-              d={item.areaPath}
-              className={item.colors.fill}
-              fillOpacity="0.12"
-            />
-          ) : null,
-        )}
-
-        {chart.map((item) => (
+        {points.length ? (
           <path
-            key={`line-${item.currency}`}
-            d={item.linePath}
+            d={buildArea(points, baseline)}
+            className="fill-violet-500"
+            fillOpacity="0.12"
+          />
+        ) : null}
+        {points.length ? (
+          <path
+            d={buildPath(points)}
             fill="none"
-            className={item.colors.line}
+            className="stroke-violet-500"
             strokeWidth="2"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
           />
-        ))}
+        ) : null}
       </svg>
 
       <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.1em] text-foreground-faint">
@@ -163,19 +177,19 @@ export function MonthlySpendChart({ expenses }: { expenses: Expense[] }) {
       </div>
 
       <p className="mt-2 text-xs text-foreground-faint">
-        {headline && headline.peak.day > 0 ? (
+        {currency && peak.day > 0 ? (
           <>
             Most spent on{' '}
             <span className="font-medium text-foreground">
-              {monthLabel} {headline.peak.day}
+              {monthLabel} {peak.day}
             </span>
             {' · '}
             <span className="font-mono text-foreground">
-              {formatCurrency(headline.peak.amount, headline.currency)}
+              {formatCurrency(peak.amount, currency)}
             </span>
           </>
         ) : (
-          <>No expenses recorded this month yet.</>
+          <>No movement recorded this month yet.</>
         )}
       </p>
     </div>

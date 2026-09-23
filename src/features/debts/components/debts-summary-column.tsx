@@ -69,7 +69,11 @@ export function DebtsSummaryColumn({
             </h2>
           </div>
 
-          <MonthlySpendChart expenses={expenses} />
+          <MonthlySpendChart
+            debts={debts}
+            expenses={expenses}
+            recurringPayments={recurringPayments}
+          />
         </div>
 
         <div className="grid min-w-0 gap-2 lg:grid-cols-3">

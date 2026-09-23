@@ -1,79 +1,94 @@
 /**
- * Aggregates expenses into the current month, bucketed by day and split per
- * currency.
+ * Daily outflow for the current month: everything that leaves the account on a
+ * given day, not just manually recorded expenses.
  *
- * One series per currency so amounts are never added across S/ and $, which
- * would produce a meaningless total.
+ * Feeding it expenses, recurring charges and debt installments means the chart
+ * answers "how much came out today / which day cost the most" in one line.
+ *
+ * Amounts are never added across currencies. The series shown is the one with
+ * the highest total, which is where the real activity is.
  */
-export type MonthlySpendSeries = {
+export type OutflowEntry = {
   currency: string
-  /** Day of the month (1-31) mapped to the total spent that day. */
+  /** YYYY-MM-DD. */
+  date: string
+  amount: number
+}
+
+export type DailyOutflow = {
+  currency: string | null
+  /** Day of the month (1-31) mapped to the total that day. */
   byDay: Map<number, number>
   total: number
   peak: { day: number; amount: number }
-}
-
-export type MonthlySpend = {
-  series: MonthlySpendSeries[]
   /** Days elapsed in the month, 1..today. */
   daysElapsed: number
   monthLabel: string
+  /** Month totals for every other currency, so nothing is hidden silently. */
+  otherCurrencies: Array<{ currency: string; total: number }>
 }
 
-export function aggregateMonthlySpend(
-  expenses: Array<{ amount: number; currency: string; spentAt: string }>,
+export function aggregateMonthlyOutflow(
+  entries: OutflowEntry[],
   reference: Date = new Date(),
-): MonthlySpend {
+): DailyOutflow {
   const year = reference.getFullYear()
   const month = reference.getMonth()
   const daysElapsed = reference.getDate()
-  const buckets = new Map<string, Map<number, number>>()
+  const byCurrency = new Map<string, Map<number, number>>()
 
-  for (const expense of expenses) {
-    const [expenseYear, expenseMonth, expenseDay] = expense.spentAt
-      .split('-')
-      .map(Number)
+  for (const entry of entries) {
+    const [entryYear, entryMonth, entryDay] = entry.date.split('-').map(Number)
 
-    if (expenseYear !== year || expenseMonth !== month + 1) {
+    if (entryYear !== year || entryMonth !== month + 1) {
       continue
     }
 
-    if (!Number.isFinite(expenseDay) || expenseDay < 1) {
+    if (!Number.isFinite(entryDay) || entryDay < 1 || entryDay > 31) {
       continue
     }
 
-    const currency = expense.currency.toUpperCase()
-    const days = buckets.get(currency) ?? new Map<number, number>()
-    days.set(expenseDay, (days.get(expenseDay) ?? 0) + expense.amount)
-    buckets.set(currency, days)
+    if (!Number.isFinite(entry.amount) || entry.amount === 0) {
+      continue
+    }
+
+    const currency = entry.currency.toUpperCase()
+    const days = byCurrency.get(currency) ?? new Map<number, number>()
+    days.set(entryDay, (days.get(entryDay) ?? 0) + entry.amount)
+    byCurrency.set(currency, days)
   }
 
-  const series = Array.from(buckets.entries())
-    .map(([currency, byDay]) => {
-      let total = 0
-      let peakDay = 0
-      let peakAmount = 0
-
-      for (const [day, amount] of byDay) {
-        total += amount
-        if (amount > peakAmount) {
-          peakAmount = amount
-          peakDay = day
-        }
-      }
-
-      return {
-        currency,
-        byDay,
-        total,
-        peak: { day: peakDay, amount: peakAmount },
-      }
-    })
+  const totals = Array.from(byCurrency.entries())
+    .map(([currency, days]) => ({
+      currency,
+      days,
+      total: Array.from(days.values()).reduce((sum, value) => sum + value, 0),
+    }))
     .sort((left, right) => right.total - left.total)
 
+  const primary = totals[0]
+  let peakDay = 0
+  let peakAmount = 0
+
+  if (primary) {
+    for (const [day, amount] of primary.days) {
+      if (amount > peakAmount) {
+        peakAmount = amount
+        peakDay = day
+      }
+    }
+  }
+
   return {
-    series,
+    currency: primary?.currency ?? null,
+    byDay: primary?.days ?? new Map(),
+    total: primary?.total ?? 0,
+    peak: { day: peakDay, amount: peakAmount },
     daysElapsed,
     monthLabel: reference.toLocaleDateString('en-US', { month: 'long' }),
+    otherCurrencies: totals.slice(1).map(({ currency, total }) => ({
+      currency,
+      total,
+    })),
   }
 }
