@@ -71,8 +71,10 @@ describe('getDebtProjection', () => {
       new Date('2026-09-01'),
     )
 
-    expect(points[1]!.label).toMatch(/^[A-Z][a-z]{2} \d{2}$/)
-    // Two years in, the label must not read the same as one year in.
+    // Must not read as a day of the month: "Sep '28", never "Sep 28".
+    expect(points[1]!.label).toMatch(/^[A-Z][a-z]{2} '\d{2}$/)
+    expect(points[1]!.label).toContain("'")
+
     const yearOne = points.find((point) => point.monthIndex === 12)
     const yearTwo = points.find((point) => point.monthIndex === 24)
     expect(yearOne!.label).not.toBe(yearTwo!.label)

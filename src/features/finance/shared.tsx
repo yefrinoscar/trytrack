@@ -372,13 +372,13 @@ export function DebtProjectionChart({
   const maxPointsLength = normalizedSeries.length
     ? Math.max(...normalizedSeries.map((item) => item.points.length))
     : 0
-  const [activeIndex, setActiveIndex] = useState(
-    Math.max(maxPointsLength - 1, 0),
-  )
+  // Start on "Now" so the panel shows the balance you actually owe, instead of
+  // jumping to the zero balance at the end of the projection.
+  const [activeIndex, setActiveIndex] = useState(0)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setActiveIndex(Math.max(maxPointsLength - 1, 0))
+    setActiveIndex(0)
   }, [maxPointsLength])
 
   if (!normalizedSeries.length) {
@@ -481,7 +481,9 @@ export function DebtProjectionChart({
     <div>
       <div className={compact ? 'mb-1.5' : 'mb-3'}>
         <p className="text-xs uppercase tracking-[0.12em] text-foreground-faint">
-          {activeLabel}
+          {seriesChart[0]?.activePoint.monthIndex === 0
+            ? 'Balance today'
+            : `Balance · ${activeLabel}`}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
           {seriesChart.map((seriesItem) => (
@@ -501,14 +503,14 @@ export function DebtProjectionChart({
       <div
         className={`flex items-center justify-between gap-4 text-xs text-foreground-faint ${compact ? 'mb-1.5' : 'mb-3'}`}
       >
-        <span>
-          {formatCurrency(
+        <span className="uppercase tracking-[0.12em]">Remaining balance</span>
+        <span className="font-mono">
+          {formatCompactCurrency(
             seriesChart[0]?.points[0]?.balance ?? 0,
             seriesChart[0]?.currency ?? currency,
           )}
-        </span>
-        <span>
-          {formatCurrency(
+          {' → '}
+          {formatCompactCurrency(
             seriesChart[0]?.points.at(-1)?.balance ?? 0,
             seriesChart[0]?.currency ?? currency,
           )}
