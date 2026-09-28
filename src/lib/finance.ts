@@ -1058,14 +1058,25 @@ export function useFinanceDashboard(enabled = true) {
     queryKey: DASHBOARD_QUERY_KEY,
     queryFn: async () => {
       const localData = await readDashboardData()
-      const user = await getOrCreateAppUser(
-        apiClient,
-        localData.settings.currency,
-      )
-      let debtRows = await apiClient.query(api.debts.listByUser, {
-        userId: user._id,
-      })
 
+      // One round trip for the whole page. This used to be seven sequential
+      // calls, which cost seconds of waiting on every load.
+      const payload = await apiClient.query(api.dashboard.bootstrap, {})
+
+      if (!payload) {
+        throw new Error('Unauthenticated')
+      }
+
+      const user = payload.user
+      let debtRows = payload.debts as any[]
+      let expenseRows = payload.expenses as any[]
+      let recurringRows = payload.recurringPayments as any[]
+      const checkRows = payload.recurringPaymentChecks as any[]
+      const emailExpenseImports = payload.emailExpenseImports as any[]
+      const installmentOverview = payload.installmentOverview as any[]
+
+      // Migration path for a browser that still holds rows locally. Runs once
+      // at most, and only when there is something the database does not have.
       if (!debtRows.length && localData.debts.length) {
         await Promise.all(
           localData.debts.map((debt) =>
@@ -1080,34 +1091,6 @@ export function useFinanceDashboard(enabled = true) {
           userId: user._id,
         })
       }
-
-      const installmentOverview = debtRows.length
-        ? await apiClient.query(api.debts.getInstallmentOverview, {
-            debtIds: debtRows.map((debt: { _id: string }) => debt._id),
-          })
-        : []
-      const installmentOverviewByDebtId = new Map(
-        installmentOverview.map(
-          (item: {
-            debtId: string
-            originalBalance: number
-            currentPlanVersion: number
-            plans: DebtInstallmentPlan[]
-            payments: DebtInstallmentPayment[]
-          }) => [item.debtId, item] as const,
-        ),
-      )
-      const emailExpenseImports = await apiClient.query(
-        api.expenses.listPendingEmailImports,
-        {},
-      )
-
-      // Expenses live in the database so API-created and email-imported rows
-      // are visible. Anything this browser still has in localStorage is
-      // migrated once, deduped so re-runs cannot create duplicates.
-      let expenseRows = await apiClient.query(api.expenses.listByUser, {
-        userId: user._id,
-      })
 
       if (localData.expenses.length) {
         const known = new Set(
@@ -1135,28 +1118,12 @@ export function useFinanceDashboard(enabled = true) {
           expenseRows = await apiClient.query(api.expenses.listByUser, {
             userId: user._id,
           })
-
-          // The database is the source of truth now, so drop the local copy to
-          // avoid re-creating these rows on the next load.
-          await writeDashboardData({ ...localData, expenses: [] })
         }
+
+        await writeDashboardData({ ...localData, expenses: [] })
       }
 
-      // Recurring payments work the same way, but the demo rows that ship in
-      // seedData are never migrated.
-      let recurringRows = await apiClient.query(
-        api.recurringPayments.listByUser,
-        { userId: user._id },
-      )
-      // Paid state is per month; the UI only ever shows the current one.
-      const currentMonth = new Date().toISOString().slice(0, 7)
-      const checkRows = await apiClient.query(
-        api.recurringPayments.listChecks,
-        {
-          userId: user._id,
-          month: currentMonth,
-        },
-      )
+      // Demo rows that ship in seedData are never migrated.
       const localRecurring = localData.recurringPayments.filter(
         (payment) => !SEED_RECURRING_IDS.has(payment.id),
       )
@@ -1198,6 +1165,18 @@ export function useFinanceDashboard(enabled = true) {
         await writeDashboardData({ ...localData, recurringPayments: [] })
       }
 
+      const installmentOverviewByDebtId = new Map(
+        installmentOverview.map(
+          (item: {
+            debtId: string
+            originalBalance: number
+            currentPlanVersion: number
+            plans: DebtInstallmentPlan[]
+            payments: DebtInstallmentPayment[]
+          }) => [item.debtId, item] as const,
+        ),
+      )
+
       return {
         ...localData,
         expenses: expenseRows.map((row: Doc<'expenses'>) =>
@@ -1233,14 +1212,7 @@ export function useFinanceDashboard(enabled = true) {
         })),
         debts: debtRows.map((debt: any) => {
           const nextDebt = toDebt(debt)
-          const overview = installmentOverviewByDebtId.get(debt._id) as
-            | {
-                originalBalance: number
-                currentPlanVersion: number
-                plans: DebtInstallmentPlan[]
-                payments: DebtInstallmentPayment[]
-              }
-            | undefined
+          const overview = installmentOverviewByDebtId.get(debt._id)
 
           if (!overview) {
             return nextDebt

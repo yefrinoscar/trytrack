@@ -3,6 +3,9 @@
  * dispatcher in `src/server/rpc.server.ts` resolves these strings.
  */
 export const api = {
+  dashboard: {
+    bootstrap: 'dashboard.bootstrap',
+  },
   users: {
     getByEmail: 'users.getByEmail',
     current: 'users.current',

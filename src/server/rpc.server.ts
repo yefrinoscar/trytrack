@@ -1,3 +1,4 @@
+import * as dashboard from './api/dashboard'
 import * as debts from './api/debts'
 import * as expenses from './api/expenses'
 import * as monthlySpend from './api/monthlySpend'
@@ -12,6 +13,8 @@ const handlers: Record<string, Handler> = {
   'users.ensureCurrent': users.ensureCurrent,
   'users.create': users.create,
   'users.update': users.update,
+
+  'dashboard.bootstrap': dashboard.bootstrap,
 
   'debts.listByUser': debts.listByUser,
   'debts.getInstallmentOverview': debts.getInstallmentOverview,
