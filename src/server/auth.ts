@@ -9,6 +9,7 @@ import {
 } from './db/schema'
 import { getEnv, getSiteUrl } from './env'
 import { sendResetPasswordEmail } from './auth-email'
+import { requestCache } from './request-cache'
 
 type Auth = ReturnType<typeof betterAuth>
 
@@ -50,6 +51,15 @@ export async function getAuth(): Promise<Auth> {
       },
     }),
     trustedOrigins: trustedOrigins(),
+    // Caches the session in a signed cookie so a page load does not spend a
+    // database round trip just to find out who is signed in. D1 sits in a
+    // different region from the Worker, so each query costs real latency.
+    session: {
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60,
+      },
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
@@ -68,20 +78,28 @@ export async function getAuth(): Promise<Auth> {
   return cachedAuth
 }
 
-/** Best-effort current session; returns null outside a request context. */
+/**
+ * Current session, resolved once per request.
+ *
+ * Every guarded data function used to call this again, so a page touching
+ * seven of them paid for seven session lookups, each a database query.
+ * `requestCache` collapses them into one without leaking between callers.
+ */
 export async function getSession() {
-  const { getRequest } = await import('@tanstack/react-start/server')
-  let headers: Headers
-  try {
-    headers = getRequest().headers
-  } catch {
-    return null
-  }
+  return await requestCache('__trytrackSession', async () => {
+    const { getRequest } = await import('@tanstack/react-start/server')
+    let request: Request
+    try {
+      request = getRequest()
+    } catch {
+      return null
+    }
 
-  const auth = await getAuth()
-  try {
-    return await auth.api.getSession({ headers })
-  } catch {
-    return null
-  }
+    const auth = await getAuth()
+    try {
+      return await auth.api.getSession({ headers: request.headers })
+    } catch {
+      return null
+    }
+  })
 }

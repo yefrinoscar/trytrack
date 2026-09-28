@@ -4,6 +4,7 @@ import { users } from '../db/schema'
 import { toDoc } from '../db/serialize'
 import { newId } from '../db/ids'
 import { getSession } from '../auth'
+import { requestCache } from '../request-cache'
 
 async function requireSessionEmail() {
   const session = await getSession()
@@ -15,13 +16,16 @@ async function requireSessionEmail() {
 }
 
 async function findByEmail(email: string) {
-  const db = await getDb()
-  const [row] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1)
-  return row ?? null
+  // One query per request, however many callers ask for the same account.
+  return await requestCache(`__trytrackUserByEmail:${email}`, async () => {
+    const db = await getDb()
+    const [row] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1)
+    return row ?? null
+  })
 }
 
 /** Lookup used by server-side jobs (webhooks, cron) that run without a session. */

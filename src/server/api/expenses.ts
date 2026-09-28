@@ -452,26 +452,17 @@ export async function listPendingEmailImports() {
   }
 
   const db = await getDb()
-  const rows = (
-    await Promise.all(
-      (['pending', 'confirmed'] as const).map((status) =>
-        db
-          .select()
-          .from(emailExpenseImports)
-          .where(
-            and(
-              eq(emailExpenseImports.userId, appUser.id),
-              eq(emailExpenseImports.status, status),
-            ),
-          )
-          .orderBy(desc(emailExpenseImports.createdAt))
-          .limit(250),
+  const rows = await db
+    .select()
+    .from(emailExpenseImports)
+    .where(
+      and(
+        eq(emailExpenseImports.userId, appUser.id),
+        inArray(emailExpenseImports.status, ['pending', 'confirmed']),
       ),
     )
-  )
-    .flat()
-    .sort((left, right) => right.createdAt - left.createdAt)
-    .slice(0, 250)
+    .orderBy(desc(emailExpenseImports.createdAt))
+    .limit(250)
 
   const seen = new Set<string>()
   const uniqueRows: EmailImportRow[] = []

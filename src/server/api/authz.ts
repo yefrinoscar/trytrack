@@ -8,6 +8,7 @@ import {
   users,
 } from '../db/schema'
 import { getSession } from '../auth'
+import { requestCache } from '../request-cache'
 
 /**
  * Authorization helpers shared by the data functions.
@@ -56,12 +57,17 @@ export async function requireAppUser(): Promise<AppUser> {
     throw new UnauthenticatedError()
   }
 
-  const db = await getDb()
-  const [row] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1)
+  // Resolved once per request: every guarded function needs it and each lookup
+  // was another query.
+  const row = await requestCache(`__trytrackAppUser:${email}`, async () => {
+    const db = await getDb()
+    const [found] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1)
+    return found ?? null
+  })
 
   if (!row) {
     // Session exists but the app profile has not been created yet. This can

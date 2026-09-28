@@ -311,17 +311,46 @@ export async function getInstallmentOverview(args: { debtIds: string[] }) {
   await requireOwnDebts(args.debtIds)
 
   const db = await getDb()
-  const debtIdSet = new Set(args.debtIds)
   const [debtRows, storedPlans, storedPayments] = await Promise.all([
     db.select().from(debts).where(inArray(debts.id, args.debtIds)),
-    db.select().from(debtPlans).limit(500),
-    db.select().from(debtPayments).limit(2000),
+    db.select().from(debtPlans).where(inArray(debtPlans.debtId, args.debtIds)),
+    db
+      .select()
+      .from(debtPayments)
+      .where(inArray(debtPayments.debtId, args.debtIds)),
+  ])
+
+  return buildInstallmentOverview(debtRows, storedPlans, storedPayments)
+}
+
+/**
+ * Same shape as `getInstallmentOverview`, for one account, without needing the
+ * debt ids first. Joining on `debts` lets the debts, plans and payments be
+ * fetched in a single parallel batch, which matters when every query costs a
+ * cross-region round trip.
+ */
+export async function getInstallmentOverviewForUser(args: { userId: string }) {
+  await requireOwnUserId(args.userId)
+
+  const db = await getDb()
+  const [debtRows, planRows, paymentRows] = await Promise.all([
+    db.select().from(debts).where(eq(debts.userId, args.userId)),
+    db
+      .select({ plan: debtPlans })
+      .from(debtPlans)
+      .innerJoin(debts, eq(debtPlans.debtId, debts.id))
+      .where(eq(debts.userId, args.userId)),
+    db
+      .select({ payment: debtPayments })
+      .from(debtPayments)
+      .innerJoin(debts, eq(debtPayments.debtId, debts.id))
+      .where(eq(debts.userId, args.userId)),
   ])
 
   return buildInstallmentOverview(
     debtRows,
-    storedPlans.filter((plan) => debtIdSet.has(plan.debtId)),
-    storedPayments.filter((payment) => debtIdSet.has(payment.debtId)),
+    planRows.map((row) => row.plan),
+    paymentRows.map((row) => row.payment),
   )
 }
 
