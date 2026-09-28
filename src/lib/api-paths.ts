@@ -24,7 +24,9 @@ export const api = {
   },
   recurringPayments: {
     listByUser: 'recurringPayments.listByUser',
+    listChecks: 'recurringPayments.listChecks',
     create: 'recurringPayments.create',
+    setCheck: 'recurringPayments.setCheck',
     update: 'recurringPayments.update',
     remove: 'recurringPayments.remove',
   },

@@ -206,6 +206,16 @@ export interface RecurringPayment {
   updatedAt?: string
 }
 
+/** One recurring payment marked as paid for a specific month. */
+export interface RecurringPaymentCheck {
+  id: string
+  recurringPaymentId: string
+  /** YYYY-MM. */
+  month: string
+  amount: number
+  paidAt: string
+}
+
 export interface DashboardData {
   debts: Debt[]
   expenses: Expense[]
@@ -214,6 +224,8 @@ export interface DashboardData {
   investments: Investment[]
   goals: Goal[]
   recurringPayments: RecurringPayment[]
+  /** Paid state for the current month, keyed by recurring payment id. */
+  recurringPaymentChecks: RecurringPaymentCheck[]
   settings: DashboardSettings
 }
 
@@ -621,6 +633,7 @@ const seedData: DashboardData = {
   ],
   expenses: [],
   emailExpenseImports: [],
+  recurringPaymentChecks: [],
   recurringPayments: [
     {
       id: 'recurring-netflix',
@@ -736,6 +749,7 @@ function emptyDashboardData(currency = 'USD'): DashboardData {
     investments: [],
     goals: [],
     recurringPayments: [],
+    recurringPaymentChecks: [],
     settings: {
       currency: enabledCurrencies.includes(normalizedCurrency)
         ? normalizedCurrency
@@ -856,6 +870,26 @@ function normalizeDashboardData(input: unknown): DashboardData {
                 : new Date().toISOString(),
         }))
       : fallback.recurringPayments,
+    recurringPaymentChecks: Array.isArray(value.recurringPaymentChecks)
+      ? value.recurringPaymentChecks
+          .filter(
+            (check) =>
+              check &&
+              typeof check.id === 'string' &&
+              typeof check.recurringPaymentId === 'string' &&
+              typeof check.month === 'string',
+          )
+          .map((check) => ({
+            id: check.id,
+            recurringPaymentId: check.recurringPaymentId,
+            month: check.month,
+            amount: typeof check.amount === 'number' ? check.amount : 0,
+            paidAt:
+              typeof check.paidAt === 'string'
+                ? check.paidAt
+                : new Date().toISOString().slice(0, 10),
+          }))
+      : [],
     settings: {
       currency: (() => {
         const rawCurrency =
@@ -1114,6 +1148,15 @@ export function useFinanceDashboard(enabled = true) {
         api.recurringPayments.listByUser,
         { userId: user._id },
       )
+      // Paid state is per month; the UI only ever shows the current one.
+      const currentMonth = new Date().toISOString().slice(0, 7)
+      const checkRows = await apiClient.query(
+        api.recurringPayments.listChecks,
+        {
+          userId: user._id,
+          month: currentMonth,
+        },
+      )
       const localRecurring = localData.recurringPayments.filter(
         (payment) => !SEED_RECURRING_IDS.has(payment.id),
       )
@@ -1163,6 +1206,13 @@ export function useFinanceDashboard(enabled = true) {
         recurringPayments: recurringRows.map((row: Doc<'recurringPayments'>) =>
           toRecurringPaymentFromRow(row),
         ),
+        recurringPaymentChecks: checkRows.map((row: any) => ({
+          id: row._id,
+          recurringPaymentId: row.recurringPaymentId,
+          month: row.month,
+          amount: row.amount,
+          paidAt: row.paidAt,
+        })),
         emailExpenseImports: emailExpenseImports.map((item: any) => ({
           id: item._id,
           emailId: item.emailId,
@@ -2055,6 +2105,28 @@ export function useFinanceActions() {
     },
   })
 
+  const setRecurringPaymentCheckMutation = useMutation({
+    mutationFn: async ({
+      id,
+      month,
+      paid,
+    }: {
+      id: string
+      month: string
+      paid: boolean
+    }) => {
+      await apiClient.mutation(api.recurringPayments.setCheck, {
+        id,
+        month,
+        paid,
+      })
+      return null
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: DASHBOARD_QUERY_KEY })
+    },
+  })
+
   const updateSettingsMutation = useMutation({
     mutationFn: async (settings: Partial<DashboardSettings>) => {
       return updateDashboardData((current) => ({
@@ -2126,6 +2198,7 @@ export function useFinanceActions() {
       updateInstallmentAmount: updateInstallmentAmountMutation.mutateAsync,
       undoDebtPayment: undoDebtPaymentMutation.mutateAsync,
       createRecurringPayment: createRecurringPaymentMutation.mutateAsync,
+      setRecurringPaymentCheck: setRecurringPaymentCheckMutation.mutateAsync,
       updateRecurringPayment: updateRecurringPaymentMutation.mutateAsync,
       removeRecurringPayment: removeRecurringPaymentMutation.mutateAsync,
       updateSettings: updateSettingsMutation.mutateAsync,
@@ -2144,6 +2217,7 @@ export function useFinanceActions() {
         updateInstallmentAmountMutation.isPending ||
         undoDebtPaymentMutation.isPending ||
         createRecurringPaymentMutation.isPending ||
+        setRecurringPaymentCheckMutation.isPending ||
         updateRecurringPaymentMutation.isPending ||
         removeRecurringPaymentMutation.isPending ||
         updateSettingsMutation.isPending ||

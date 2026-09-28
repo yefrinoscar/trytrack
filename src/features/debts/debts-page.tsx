@@ -50,6 +50,7 @@ function DebtsView({
 
         <RecurringPaymentsColumn
           recurringPayments={data.recurringPayments}
+          recurringPaymentChecks={data.recurringPaymentChecks}
           defaultCurrency={defaultCurrency}
           enabledCurrencies={enabledCurrencies}
           actions={actions}

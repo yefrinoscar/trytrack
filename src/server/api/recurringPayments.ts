@@ -1,6 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { getDb } from '../db/client'
-import { recurringPayments } from '../db/schema'
+import { recurringPaymentChecks, recurringPayments } from '../db/schema'
 import { newId } from '../db/ids'
 import { toDoc } from '../db/serialize'
 import { requireOwnRecord, requireOwnUserId } from './authz'
@@ -8,6 +8,7 @@ import type { InferSelectModel } from 'drizzle-orm'
 
 type RecurringStatus = 'active' | 'paused' | 'cancelled'
 type RecurringRow = InferSelectModel<typeof recurringPayments>
+type RecurringCheckRow = InferSelectModel<typeof recurringPaymentChecks>
 
 export async function listByUser(args: { userId: string }) {
   await requireOwnUserId(args.userId)
@@ -91,6 +92,166 @@ export async function remove(args: { id: string }) {
 /* ------------------------------------------------------------------ */
 /* Session-less helpers used by the public API                         */
 /* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/* Paid / unpaid tracking, one check per payment per month              */
+/* ------------------------------------------------------------------ */
+
+/** Checks recorded for one account in a month, as `YYYY-MM`. */
+export async function listChecks(args: { userId: string; month: string }) {
+  await requireOwnUserId(args.userId)
+
+  const db = await getDb()
+  const rows = await db
+    .select()
+    .from(recurringPaymentChecks)
+    .where(
+      and(
+        eq(recurringPaymentChecks.userId, args.userId),
+        eq(recurringPaymentChecks.month, args.month),
+      ),
+    )
+
+  return rows.map(toDoc)
+}
+
+/**
+ * Marks a recurring payment as paid (or clears it) for one month.
+ * No-op when the state already matches, so double clicks are safe.
+ */
+export async function setCheck(args: {
+  id: string
+  month: string
+  paid: boolean
+  amount?: number
+}) {
+  await requireOwnRecord('recurringPayments', args.id)
+
+  const db = await getDb()
+  const [payment] = await db
+    .select()
+    .from(recurringPayments)
+    .where(eq(recurringPayments.id, args.id))
+    .limit(1)
+
+  if (!payment) {
+    throw new Error('Recurring payment not found')
+  }
+
+  const existing = await db
+    .select()
+    .from(recurringPaymentChecks)
+    .where(
+      and(
+        eq(recurringPaymentChecks.recurringPaymentId, args.id),
+        eq(recurringPaymentChecks.month, args.month),
+      ),
+    )
+    .limit(1)
+
+  if (!args.paid) {
+    if (existing.length) {
+      await db
+        .delete(recurringPaymentChecks)
+        .where(eq(recurringPaymentChecks.id, existing[0]!.id))
+    }
+    return
+  }
+
+  if (existing.length) {
+    return
+  }
+
+  await db.insert(recurringPaymentChecks).values({
+    id: newId(),
+    userId: payment.userId,
+    recurringPaymentId: args.id,
+    month: args.month,
+    amount: args.amount ?? payment.amount,
+    paidAt: new Date().toISOString().slice(0, 10),
+    createdAt: Date.now(),
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* Session-less helpers used by the public API                         */
+/* ------------------------------------------------------------------ */
+
+/** Checks for an account in a month, without a browser session. */
+export async function listChecksForApi(args: {
+  userId: string
+  month: string
+}): Promise<RecurringCheckRow[]> {
+  const db = await getDb()
+  return await db
+    .select()
+    .from(recurringPaymentChecks)
+    .where(
+      and(
+        eq(recurringPaymentChecks.userId, args.userId),
+        eq(recurringPaymentChecks.month, args.month),
+      ),
+    )
+}
+
+/**
+ * Marks a recurring payment paid (or unpaid) by id, without a session.
+ * Returns false when the recurring payment does not exist.
+ */
+export async function setCheckForApi(args: {
+  userId: string
+  id: string
+  month: string
+  paid: boolean
+  amount?: number
+}) {
+  const db = await getDb()
+  const [payment] = await db
+    .select()
+    .from(recurringPayments)
+    .where(eq(recurringPayments.id, args.id))
+    .limit(1)
+
+  if (!payment || payment.userId !== args.userId) {
+    return false
+  }
+
+  const existing = await db
+    .select()
+    .from(recurringPaymentChecks)
+    .where(
+      and(
+        eq(recurringPaymentChecks.recurringPaymentId, args.id),
+        eq(recurringPaymentChecks.month, args.month),
+      ),
+    )
+    .limit(1)
+
+  if (!args.paid) {
+    if (existing.length) {
+      await db
+        .delete(recurringPaymentChecks)
+        .where(eq(recurringPaymentChecks.id, existing[0]!.id))
+    }
+    return true
+  }
+
+  if (existing.length) {
+    return true
+  }
+
+  await db.insert(recurringPaymentChecks).values({
+    id: newId(),
+    userId: payment.userId,
+    recurringPaymentId: args.id,
+    month: args.month,
+    amount: args.amount ?? payment.amount,
+    paidAt: new Date().toISOString().slice(0, 10),
+    createdAt: Date.now(),
+  })
+
+  return true
+}
 
 /** Creates a recurring payment without a browser session. */
 export async function createForApi(args: {

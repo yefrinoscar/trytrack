@@ -139,6 +139,35 @@ export const recurringPayments = sqliteTable(
   ],
 )
 
+/**
+ * Records that a recurring payment was paid for a given month, so the UI can
+ * show what is still pending instead of only the schedule.
+ */
+export const recurringPaymentChecks = sqliteTable(
+  'recurring_payment_checks',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    recurringPaymentId: text('recurring_payment_id').notNull(),
+    /** Month the charge belongs to, as YYYY-MM. */
+    month: text('month').notNull(),
+    /** Amount at the time it was marked paid. */
+    amount: real('amount').notNull(),
+    paidAt: text('paid_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('recurring_payment_checks_by_payment_and_month').on(
+      table.recurringPaymentId,
+      table.month,
+    ),
+    index('recurring_payment_checks_by_user_and_month').on(
+      table.userId,
+      table.month,
+    ),
+  ],
+)
+
 export const expenses = sqliteTable(
   'expenses',
   {
@@ -324,6 +353,7 @@ export const schema = {
   debtPlans,
   debtPayments,
   recurringPayments,
+  recurringPaymentChecks,
   expenses,
   emailExpenseImports,
   gmailSyncStates,

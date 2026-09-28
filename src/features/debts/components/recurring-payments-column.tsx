@@ -1,5 +1,13 @@
 import { useMemo } from 'react'
-import { CircleSlash, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react'
+import {
+  CheckCircle2,
+  Circle,
+  CircleSlash,
+  MoreVertical,
+  Pencil,
+  Play,
+  Trash2,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -21,12 +29,14 @@ import {
   sortByDateAscending,
 } from '@/features/finance/shared'
 import type { FinanceActions } from '@/features/finance/shared'
-import type { RecurringPayment } from '@/lib/finance'
+import type { RecurringPayment, RecurringPaymentCheck } from '@/lib/finance'
 import { useRecurringPaymentsColumn } from '../hooks/use-recurring-payments-column'
 import { recurringPaymentToDraft } from '../utils/recurring-payment-draft'
 
 interface RecurringPaymentsColumnProps {
   recurringPayments: RecurringPayment[]
+  /** Paid state for the current month. */
+  recurringPaymentChecks: RecurringPaymentCheck[]
   defaultCurrency: string
   enabledCurrencies: string[]
   actions: FinanceActions
@@ -34,10 +44,29 @@ interface RecurringPaymentsColumnProps {
 
 export function RecurringPaymentsColumn({
   recurringPayments,
+  recurringPaymentChecks,
   defaultCurrency,
   enabledCurrencies,
   actions,
 }: RecurringPaymentsColumnProps) {
+  // The card only ever shows this month's paid state.
+  const currentMonth = new Date().toISOString().slice(0, 7)
+  const paidIds = new Set(
+    recurringPaymentChecks.map((check) => check.recurringPaymentId),
+  )
+  const paidTotalByCurrency = new Map<string, number>()
+  for (const check of recurringPaymentChecks) {
+    const currency = (
+      recurringPayments.find((item) => item.id === check.recurringPaymentId)
+        ?.currency ?? ''
+    ).toUpperCase()
+    if (currency) {
+      paidTotalByCurrency.set(
+        currency,
+        (paidTotalByCurrency.get(currency) ?? 0) + check.amount,
+      )
+    }
+  }
   const {
     cancelPayment,
     closeCreateForm,
@@ -176,6 +205,7 @@ export function RecurringPaymentsColumn({
                   const pDay = dueDayNum
                   const isPaused = payment.status === 'paused'
                   const isCancelled = payment.status === 'cancelled'
+                  const isPaid = paidIds.has(payment.id)
                   const paymentCardClassName = isCancelled
                     ? 'bg-[color-mix(in_srgb,var(--danger)_7%,var(--surface-muted))] opacity-55 hover:bg-[color-mix(in_srgb,var(--danger)_10%,var(--surface-muted))] hover:opacity-70'
                     : isPaused
@@ -228,10 +258,47 @@ export function RecurringPaymentsColumn({
                           </p>
                         </div>
                         <AnimatedCurrencyValue
-                          className={`self-center font-mono text-base ${isCancelled ? 'text-muted-foreground' : 'text-foreground'}`}
+                          className={`self-center font-mono text-base ${
+                            isCancelled
+                              ? 'text-muted-foreground'
+                              : isPaid
+                                ? 'text-muted-foreground line-through'
+                                : 'text-foreground'
+                          }`}
                           currency={payment.currency}
                           value={payment.amount}
                         />
+                        {!isCancelled ? (
+                          <button
+                            type="button"
+                            aria-pressed={isPaid}
+                            title={
+                              isPaid
+                                ? `Paid for ${currentMonth} · click to undo`
+                                : `Mark ${currentMonth} as paid`
+                            }
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
+                              isPaid
+                                ? 'text-success hover:bg-success/15'
+                                : 'text-foreground-faint hover:bg-muted hover:text-foreground'
+                            }`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void actions.setRecurringPaymentCheck({
+                                id: payment.id,
+                                month: currentMonth,
+                                paid: !isPaid,
+                              })
+                            }}
+                            onPointerDown={(event) => event.stopPropagation()}
+                          >
+                            {isPaid ? (
+                              <CheckCircle2 className="h-4 w-4" />
+                            ) : (
+                              <Circle className="h-4 w-4" />
+                            )}
+                          </button>
+                        ) : null}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button

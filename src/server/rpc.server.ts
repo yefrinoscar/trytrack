@@ -25,7 +25,9 @@ const handlers: Record<string, Handler> = {
   'debts.remove': debts.remove,
 
   'recurringPayments.listByUser': recurringPayments.listByUser,
+  'recurringPayments.listChecks': recurringPayments.listChecks,
   'recurringPayments.create': recurringPayments.create,
+  'recurringPayments.setCheck': recurringPayments.setCheck,
   'recurringPayments.update': recurringPayments.update,
   'recurringPayments.remove': recurringPayments.remove,
 

@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import {
   createForApi,
+  listChecksForApi,
   removeByIdForApi,
   removeMatchingForApi,
+  setCheckForApi,
 } from '#/server/api/recurringPayments'
 import { findUserByEmail } from '#/server/api/users'
 import {
@@ -198,11 +200,140 @@ export async function handleDeleteRecurringPayment(request: Request) {
   return jsonResponse({ ok: true, deleted })
 }
 
+/**
+ * Marks a recurring payment as paid (or unpaid) for a month.
+ *
+ *   PATCH /api/v1/recurring-payments
+ *   {
+ *     "email": "you@example.com",
+ *     "id": "<recurringPaymentId>",
+ *     "month": "2026-09",
+ *     "paid": true
+ *   }
+ *
+ * `month` defaults to the current month.
+ */
+export async function handlePatchRecurringPayment(request: Request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204 })
+  }
+
+  const blocked = guard()
+  if (blocked) {
+    return blocked
+  }
+
+  if (!isApiAuthorized(request)) {
+    return jsonResponse({ error: 'Unauthorized.' }, 401)
+  }
+
+  let body: Record<string, unknown>
+  try {
+    body = (await request.json()) as Record<string, unknown>
+  } catch {
+    return jsonResponse({ error: 'Body must be valid JSON.' }, 400)
+  }
+
+  const email = asTrimmedString(body.email).toLowerCase()
+  const id = asTrimmedString(body.id)
+  const month =
+    asTrimmedString(body.month) || new Date().toISOString().slice(0, 7)
+  const paid = body.paid
+
+  const fields: Record<string, string> = {}
+  if (!email) fields.email = 'Required.'
+  if (!id) fields.id = 'Required.'
+  if (typeof paid !== 'boolean') {
+    fields.paid = 'Required. Must be true or false.'
+  }
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    fields.month = 'Must use YYYY-MM format.'
+  }
+
+  if (Object.keys(fields).length > 0) {
+    return jsonResponse({ error: 'Validation failed.', fields }, 422)
+  }
+
+  const user = await findUserByEmail(email)
+  if (!user) {
+    return jsonResponse({ error: `No account found for ${email}.` }, 404)
+  }
+
+  const ok = await setCheckForApi({
+    userId: user.id,
+    id,
+    month,
+    paid: paid as boolean,
+  })
+
+  if (!ok) {
+    return jsonResponse(
+      { error: `No recurring payment found with id ${id}.` },
+      404,
+    )
+  }
+
+  return jsonResponse({ ok: true, id, month, paid })
+}
+
+/**
+ * Lists what is paid for a month.
+ *
+ *   GET /api/v1/recurring-payments?email=you@example.com&month=2026-09
+ */
+export async function handleListRecurringPaymentChecks(request: Request) {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204 })
+  }
+
+  const blocked = guard()
+  if (blocked) {
+    return blocked
+  }
+
+  if (!isApiAuthorized(request)) {
+    return jsonResponse({ error: 'Unauthorized.' }, 401)
+  }
+
+  const params = new URL(request.url).searchParams
+  const email = asTrimmedString(params.get('email')).toLowerCase()
+  const month =
+    asTrimmedString(params.get('month')) || new Date().toISOString().slice(0, 7)
+
+  if (!email) {
+    return jsonResponse({ error: 'Provide ?email=.' }, 422)
+  }
+
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return jsonResponse({ error: 'month must use YYYY-MM format.' }, 422)
+  }
+
+  const user = await findUserByEmail(email)
+  if (!user) {
+    return jsonResponse({ error: `No account found for ${email}.` }, 404)
+  }
+
+  const checks = await listChecksForApi({ userId: user.id, month })
+
+  return jsonResponse({
+    ok: true,
+    month,
+    paid: checks.map((check) => ({
+      id: check.id,
+      recurringPaymentId: check.recurringPaymentId,
+      amount: check.amount,
+      paidAt: check.paidAt,
+    })),
+  })
+}
+
 export const Route = createFileRoute('/api/v1/recurring-payments')({
   server: {
     handlers: {
       DELETE: ({ request }) => handleDeleteRecurringPayment(request),
+      GET: ({ request }) => handleListRecurringPaymentChecks(request),
       OPTIONS: ({ request }) => handleCreateRecurringPayment(request),
+      PATCH: ({ request }) => handlePatchRecurringPayment(request),
       POST: ({ request }) => handleCreateRecurringPayment(request),
     },
   },

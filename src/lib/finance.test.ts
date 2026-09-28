@@ -79,6 +79,7 @@ const dashboardFixture: DashboardData = {
     },
   ],
   recurringPayments: [],
+  recurringPaymentChecks: [],
   settings: {
     currency: 'USD',
     enabledCurrencies: ['USD', 'PEN'],
