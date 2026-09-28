@@ -2,8 +2,14 @@ import tailwindcss from '@tailwindcss/vite'
 import { devtools } from '@tanstack/devtools-vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { nitro } from 'nitro/vite'
 import { defineConfig } from 'vite-plus'
+
+const here = dirname(fileURLToPath(import.meta.url))
+/** Absolute paths: a bare "/src/..." alias breaks the dev dep optimizer. */
+const shim = (name: string) => resolve(here, 'src/lib', name)
 
 const isTest = process.env.VITEST === 'true'
 const isServe =
@@ -45,14 +51,14 @@ export default defineConfig({
     // Cloudflare Worker on every render. Resolving clsx to a local,
     // dependency-free shim keeps that code out of the server bundle.
     alias: [
-      { find: /^clsx$/, replacement: '/src/lib/clsx.ts' },
+      { find: /^clsx$/, replacement: shim('clsx.ts') },
       {
         find: /^@tanstack\/router-devtools-core$/,
-        replacement: '/src/lib/devtools-stub.ts',
+        replacement: shim('devtools-stub.ts'),
       },
       {
         find: /^@tanstack\/react-router-devtools$/,
-        replacement: '/src/lib/devtools-stub.ts',
+        replacement: shim('devtools-stub.ts'),
       },
     ],
   },
