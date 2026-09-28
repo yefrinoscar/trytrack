@@ -51,6 +51,8 @@ function DebtsView({
         <RecurringPaymentsColumn
           recurringPayments={data.recurringPayments}
           recurringPaymentChecks={data.recurringPaymentChecks}
+          expenses={data.expenses}
+          usdPenRate={data.settings.usdPenRate}
           defaultCurrency={defaultCurrency}
           enabledCurrencies={enabledCurrencies}
           actions={actions}

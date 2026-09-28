@@ -29,7 +29,12 @@ import {
   sortByDateAscending,
 } from '@/features/finance/shared'
 import type { FinanceActions } from '@/features/finance/shared'
-import type { RecurringPayment, RecurringPaymentCheck } from '@/lib/finance'
+import type {
+  Expense,
+  RecurringPayment,
+  RecurringPaymentCheck,
+} from '@/lib/finance'
+import { detectRecurringMatches } from '@/lib/recurring-match'
 import { useRecurringPaymentsColumn } from '../hooks/use-recurring-payments-column'
 import { recurringPaymentToDraft } from '../utils/recurring-payment-draft'
 
@@ -37,6 +42,9 @@ interface RecurringPaymentsColumnProps {
   recurringPayments: RecurringPayment[]
   /** Paid state for the current month. */
   recurringPaymentChecks: RecurringPaymentCheck[]
+  /** Used to detect a charge that was already imported from email. */
+  expenses: Expense[]
+  usdPenRate: number
   defaultCurrency: string
   enabledCurrencies: string[]
   actions: FinanceActions
@@ -45,28 +53,31 @@ interface RecurringPaymentsColumnProps {
 export function RecurringPaymentsColumn({
   recurringPayments,
   recurringPaymentChecks,
+  expenses,
+  usdPenRate,
   defaultCurrency,
   enabledCurrencies,
   actions,
 }: RecurringPaymentsColumnProps) {
   // The card only ever shows this month's paid state.
   const currentMonth = new Date().toISOString().slice(0, 7)
-  const paidIds = new Set(
-    recurringPaymentChecks.map((check) => check.recurringPaymentId),
+  const manuallyPaidIds = useMemo(
+    () =>
+      new Set(recurringPaymentChecks.map((check) => check.recurringPaymentId)),
+    [recurringPaymentChecks],
   )
-  const paidTotalByCurrency = new Map<string, number>()
-  for (const check of recurringPaymentChecks) {
-    const currency = (
-      recurringPayments.find((item) => item.id === check.recurringPaymentId)
-        ?.currency ?? ''
-    ).toUpperCase()
-    if (currency) {
-      paidTotalByCurrency.set(
-        currency,
-        (paidTotalByCurrency.get(currency) ?? 0) + check.amount,
-      )
-    }
-  }
+  // Most charges arrive as an imported expense, so matching them is what makes
+  // the paid state show up without anyone clicking anything.
+  const detectedMatches = useMemo(
+    () =>
+      detectRecurringMatches(
+        recurringPayments,
+        expenses,
+        currentMonth,
+        usdPenRate,
+      ),
+    [currentMonth, expenses, recurringPayments, usdPenRate],
+  )
   const {
     cancelPayment,
     closeCreateForm,
@@ -205,7 +216,14 @@ export function RecurringPaymentsColumn({
                   const pDay = dueDayNum
                   const isPaused = payment.status === 'paused'
                   const isCancelled = payment.status === 'cancelled'
-                  const isPaid = paidIds.has(payment.id)
+                  const manualPaid = manuallyPaidIds.has(payment.id)
+                  const detected = detectedMatches.get(payment.id) ?? null
+                  const isPaid = manualPaid || Boolean(detected)
+                  const paidHint = manualPaid
+                    ? `Marked paid for ${currentMonth}`
+                    : detected
+                      ? `Paid · matched "${detected.expense.description}" on ${detected.expense.spentAt}`
+                      : `Mark ${currentMonth} as paid`
                   const paymentCardClassName = isCancelled
                     ? 'bg-[color-mix(in_srgb,var(--danger)_7%,var(--surface-muted))] opacity-55 hover:bg-[color-mix(in_srgb,var(--danger)_10%,var(--surface-muted))] hover:opacity-70'
                     : isPaused
@@ -273,9 +291,7 @@ export function RecurringPaymentsColumn({
                             type="button"
                             aria-pressed={isPaid}
                             title={
-                              isPaid
-                                ? `Paid for ${currentMonth} · click to undo`
-                                : `Mark ${currentMonth} as paid`
+                              isPaid ? `${paidHint} · click to undo` : paidHint
                             }
                             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
                               isPaid
