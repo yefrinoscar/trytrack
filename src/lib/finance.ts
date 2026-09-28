@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { api } from './api-paths'
-import { useApi } from './api-client'
+import { createApiClient, useApi } from './api-client'
+import type { ApiClient } from './api-client'
 import type { Doc, Id } from './db-types'
 
 export type DebtType = 'Credit card' | 'Loan' | 'Mortgage' | 'Other'
@@ -340,7 +341,7 @@ export interface UpdateRecurringPaymentInput {
 }
 
 const STORAGE_KEY = 'spends.sh:dashboard:v1'
-const DASHBOARD_QUERY_KEY = ['finance-dashboard'] as const
+export const DASHBOARD_QUERY_KEY = ['finance-dashboard'] as const
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100
@@ -1051,200 +1052,206 @@ function toExpenseFromEmailImport(
   }
 }
 
+/**
+ * Loads the whole dashboard in a single round trip.
+ *
+ * Exported rather than inlined so it can be called outside the hook (a route
+ * loader, a test) and so the fetch stays separate from the React wiring.
+ */
+export async function fetchDashboardData(
+  apiClient: ApiClient = createApiClient(),
+): Promise<DashboardData> {
+  const localData = await readDashboardData()
+
+  // One round trip for the whole page. This used to be seven sequential
+  // calls, which cost seconds of waiting on every load.
+  const payload = await apiClient.query(api.dashboard.bootstrap, {})
+
+  if (!payload) {
+    throw new Error('Unauthenticated')
+  }
+
+  const user = payload.user
+  let debtRows = payload.debts as any[]
+  let expenseRows = payload.expenses as any[]
+  let recurringRows = payload.recurringPayments as any[]
+  const checkRows = payload.recurringPaymentChecks as any[]
+  const emailExpenseImports = payload.emailExpenseImports as any[]
+  const installmentOverview = payload.installmentOverview as any[]
+
+  // Migration path for a browser that still holds rows locally. Runs once
+  // at most, and only when there is something the database does not have.
+  if (!debtRows.length && localData.debts.length) {
+    await Promise.all(
+      localData.debts.map((debt) =>
+        apiClient.mutation(api.debts.create, {
+          userId: user._id,
+          ...toDebtMutationValue(debt),
+        }),
+      ),
+    )
+
+    debtRows = await apiClient.query(api.debts.listByUser, {
+      userId: user._id,
+    })
+  }
+
+  if (localData.expenses.length) {
+    const known = new Set(
+      expenseRows.map((row: Doc<'expenses'>) => expenseFingerprint(row)),
+    )
+    const missing = localData.expenses.filter(
+      (expense) => !known.has(expenseFingerprint(expense)),
+    )
+
+    if (missing.length) {
+      await Promise.all(
+        missing.map((expense) =>
+          apiClient.mutation(api.expenses.create, {
+            userId: user._id,
+            amount: expense.amount,
+            currency: expense.currency,
+            category: expense.category,
+            description: expense.description,
+            ...(expense.merchant ? { merchant: expense.merchant } : {}),
+            spentAt: expense.spentAt,
+          }),
+        ),
+      )
+
+      expenseRows = await apiClient.query(api.expenses.listByUser, {
+        userId: user._id,
+      })
+    }
+
+    await writeDashboardData({ ...localData, expenses: [] })
+  }
+
+  // Demo rows that ship in seedData are never migrated.
+  const localRecurring = localData.recurringPayments.filter(
+    (payment) => !SEED_RECURRING_IDS.has(payment.id),
+  )
+
+  if (localRecurring.length) {
+    const knownRecurring = new Set(
+      recurringRows.map((row: Doc<'recurringPayments'>) =>
+        recurringPaymentFingerprint(row),
+      ),
+    )
+    const missingRecurring = localRecurring.filter(
+      (payment) => !knownRecurring.has(recurringPaymentFingerprint(payment)),
+    )
+
+    if (missingRecurring.length) {
+      await Promise.all(
+        missingRecurring.map((payment) =>
+          apiClient.mutation(api.recurringPayments.create, {
+            userId: user._id,
+            name: payment.name,
+            category: payment.category,
+            currency: payment.currency,
+            amount: payment.amount,
+            dueDay: payment.dueDay,
+            startDate: payment.startDate,
+            ...(payment.endDate ? { endDate: payment.endDate } : {}),
+            status: payment.status,
+          }),
+        ),
+      )
+
+      recurringRows = await apiClient.query(api.recurringPayments.listByUser, {
+        userId: user._id,
+      })
+    }
+
+    await writeDashboardData({ ...localData, recurringPayments: [] })
+  }
+
+  const installmentOverviewByDebtId = new Map(
+    installmentOverview.map(
+      (item: {
+        debtId: string
+        originalBalance: number
+        currentPlanVersion: number
+        plans: DebtInstallmentPlan[]
+        payments: DebtInstallmentPayment[]
+      }) => [item.debtId, item] as const,
+    ),
+  )
+
+  return {
+    ...localData,
+    expenses: expenseRows.map((row: Doc<'expenses'>) => toExpenseFromRow(row)),
+    recurringPayments: recurringRows.map((row: Doc<'recurringPayments'>) =>
+      toRecurringPaymentFromRow(row),
+    ),
+    recurringPaymentChecks: checkRows.map((row: any) => ({
+      id: row._id,
+      recurringPaymentId: row.recurringPaymentId,
+      month: row.month,
+      amount: row.amount,
+      paidAt: row.paidAt,
+    })),
+    emailExpenseImports: emailExpenseImports.map((item: any) => ({
+      id: item._id,
+      emailId: item.emailId,
+      messageId: item.messageId,
+      from: item.from,
+      to: item.to,
+      subject: item.subject,
+      merchant: item.merchant,
+      amount: item.amount,
+      currency: item.currency,
+      spentAt: item.spentAt,
+      occurredAt: item.occurredAt,
+      source: item.source,
+      category: item.category,
+      status: item.status,
+      createdAt: new Date(item.createdAt).toISOString(),
+      updatedAt: new Date(item.updatedAt).toISOString(),
+    })),
+    debts: debtRows.map((debt: any) => {
+      const nextDebt = toDebt(debt)
+      const overview = installmentOverviewByDebtId.get(debt._id)
+
+      if (!overview) {
+        return nextDebt
+      }
+
+      const installmentPlans: DebtInstallmentPlan[] = overview.plans.map(
+        (plan) => ({
+          ...plan,
+          status: plan.status as DebtPlanStatus,
+        }),
+      )
+      const installmentPayments: DebtInstallmentPayment[] =
+        overview.payments.map(
+          (payment) => ({ ...payment }) as DebtInstallmentPayment,
+        )
+
+      const activePlan =
+        installmentPlans.find((plan) => plan.status === 'active') ??
+        installmentPlans.at(-1) ??
+        null
+
+      return {
+        ...nextDebt,
+        originalBalance: overview.originalBalance,
+        currentPlanVersion: overview.currentPlanVersion,
+        activePlan,
+        installmentPlans,
+        installmentPayments,
+      }
+    }),
+  }
+}
+
 export function useFinanceDashboard(enabled = true) {
   const apiClient = useApi()
 
   return useQuery({
     queryKey: DASHBOARD_QUERY_KEY,
-    queryFn: async () => {
-      const localData = await readDashboardData()
-
-      // One round trip for the whole page. This used to be seven sequential
-      // calls, which cost seconds of waiting on every load.
-      const payload = await apiClient.query(api.dashboard.bootstrap, {})
-
-      if (!payload) {
-        throw new Error('Unauthenticated')
-      }
-
-      const user = payload.user
-      let debtRows = payload.debts as any[]
-      let expenseRows = payload.expenses as any[]
-      let recurringRows = payload.recurringPayments as any[]
-      const checkRows = payload.recurringPaymentChecks as any[]
-      const emailExpenseImports = payload.emailExpenseImports as any[]
-      const installmentOverview = payload.installmentOverview as any[]
-
-      // Migration path for a browser that still holds rows locally. Runs once
-      // at most, and only when there is something the database does not have.
-      if (!debtRows.length && localData.debts.length) {
-        await Promise.all(
-          localData.debts.map((debt) =>
-            apiClient.mutation(api.debts.create, {
-              userId: user._id,
-              ...toDebtMutationValue(debt),
-            }),
-          ),
-        )
-
-        debtRows = await apiClient.query(api.debts.listByUser, {
-          userId: user._id,
-        })
-      }
-
-      if (localData.expenses.length) {
-        const known = new Set(
-          expenseRows.map((row: Doc<'expenses'>) => expenseFingerprint(row)),
-        )
-        const missing = localData.expenses.filter(
-          (expense) => !known.has(expenseFingerprint(expense)),
-        )
-
-        if (missing.length) {
-          await Promise.all(
-            missing.map((expense) =>
-              apiClient.mutation(api.expenses.create, {
-                userId: user._id,
-                amount: expense.amount,
-                currency: expense.currency,
-                category: expense.category,
-                description: expense.description,
-                ...(expense.merchant ? { merchant: expense.merchant } : {}),
-                spentAt: expense.spentAt,
-              }),
-            ),
-          )
-
-          expenseRows = await apiClient.query(api.expenses.listByUser, {
-            userId: user._id,
-          })
-        }
-
-        await writeDashboardData({ ...localData, expenses: [] })
-      }
-
-      // Demo rows that ship in seedData are never migrated.
-      const localRecurring = localData.recurringPayments.filter(
-        (payment) => !SEED_RECURRING_IDS.has(payment.id),
-      )
-
-      if (localRecurring.length) {
-        const knownRecurring = new Set(
-          recurringRows.map((row: Doc<'recurringPayments'>) =>
-            recurringPaymentFingerprint(row),
-          ),
-        )
-        const missingRecurring = localRecurring.filter(
-          (payment) =>
-            !knownRecurring.has(recurringPaymentFingerprint(payment)),
-        )
-
-        if (missingRecurring.length) {
-          await Promise.all(
-            missingRecurring.map((payment) =>
-              apiClient.mutation(api.recurringPayments.create, {
-                userId: user._id,
-                name: payment.name,
-                category: payment.category,
-                currency: payment.currency,
-                amount: payment.amount,
-                dueDay: payment.dueDay,
-                startDate: payment.startDate,
-                ...(payment.endDate ? { endDate: payment.endDate } : {}),
-                status: payment.status,
-              }),
-            ),
-          )
-
-          recurringRows = await apiClient.query(
-            api.recurringPayments.listByUser,
-            { userId: user._id },
-          )
-        }
-
-        await writeDashboardData({ ...localData, recurringPayments: [] })
-      }
-
-      const installmentOverviewByDebtId = new Map(
-        installmentOverview.map(
-          (item: {
-            debtId: string
-            originalBalance: number
-            currentPlanVersion: number
-            plans: DebtInstallmentPlan[]
-            payments: DebtInstallmentPayment[]
-          }) => [item.debtId, item] as const,
-        ),
-      )
-
-      return {
-        ...localData,
-        expenses: expenseRows.map((row: Doc<'expenses'>) =>
-          toExpenseFromRow(row),
-        ),
-        recurringPayments: recurringRows.map((row: Doc<'recurringPayments'>) =>
-          toRecurringPaymentFromRow(row),
-        ),
-        recurringPaymentChecks: checkRows.map((row: any) => ({
-          id: row._id,
-          recurringPaymentId: row.recurringPaymentId,
-          month: row.month,
-          amount: row.amount,
-          paidAt: row.paidAt,
-        })),
-        emailExpenseImports: emailExpenseImports.map((item: any) => ({
-          id: item._id,
-          emailId: item.emailId,
-          messageId: item.messageId,
-          from: item.from,
-          to: item.to,
-          subject: item.subject,
-          merchant: item.merchant,
-          amount: item.amount,
-          currency: item.currency,
-          spentAt: item.spentAt,
-          occurredAt: item.occurredAt,
-          source: item.source,
-          category: item.category,
-          status: item.status,
-          createdAt: new Date(item.createdAt).toISOString(),
-          updatedAt: new Date(item.updatedAt).toISOString(),
-        })),
-        debts: debtRows.map((debt: any) => {
-          const nextDebt = toDebt(debt)
-          const overview = installmentOverviewByDebtId.get(debt._id)
-
-          if (!overview) {
-            return nextDebt
-          }
-
-          const installmentPlans: DebtInstallmentPlan[] = overview.plans.map(
-            (plan) => ({
-              ...plan,
-              status: plan.status as DebtPlanStatus,
-            }),
-          )
-          const installmentPayments: DebtInstallmentPayment[] =
-            overview.payments.map(
-              (payment) => ({ ...payment }) as DebtInstallmentPayment,
-            )
-
-          const activePlan =
-            installmentPlans.find((plan) => plan.status === 'active') ??
-            installmentPlans.at(-1) ??
-            null
-
-          return {
-            ...nextDebt,
-            originalBalance: overview.originalBalance,
-            currentPlanVersion: overview.currentPlanVersion,
-            activePlan,
-            installmentPlans,
-            installmentPayments,
-          }
-        }),
-      }
-    },
+    queryFn: () => fetchDashboardData(apiClient),
     enabled,
     staleTime: 0,
     gcTime: 1000 * 60 * 60,

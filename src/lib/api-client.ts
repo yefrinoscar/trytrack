@@ -24,12 +24,18 @@ export type ApiClient = {
 /**
  * Data client backed by the RPC endpoint. Call sites use
  * `apiClient.query(api.x.y, args)` / `apiClient.mutation(...)`.
+ *
+ * Not a hook, so route loaders can prefetch the same way the components do.
  */
-export function useApi(): ApiClient {
+export function createApiClient(): ApiClient {
   return {
     query: <T = any>(path: string, args?: Record<string, unknown>) =>
       rpc({ data: { path, args } }) as Promise<T>,
     mutation: <T = any>(path: string, args?: Record<string, unknown>) =>
       rpc({ data: { path, args } }) as Promise<T>,
   }
+}
+
+export function useApi(): ApiClient {
+  return createApiClient()
 }
