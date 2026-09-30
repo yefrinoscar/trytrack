@@ -34,29 +34,35 @@ function DebtsView({
       />
 
       <section className="grid gap-3 lg:grid-cols-3">
-        <DebtsListColumn
-          debts={data.debts}
-          defaultCurrency={defaultCurrency}
-          enabledCurrencies={enabledCurrencies}
-          actions={actions}
-        />
+        <div className="min-w-0">
+          <DebtsListColumn
+            debts={data.debts}
+            defaultCurrency={defaultCurrency}
+            enabledCurrencies={enabledCurrencies}
+            actions={actions}
+          />
+        </div>
 
-        <DailyExpensesColumn
-          expenses={data.expenses}
-          emailExpenseImports={data.emailExpenseImports}
-          defaultCurrency={defaultCurrency}
-          actions={actions}
-        />
+        <div className="min-w-0">
+          <DailyExpensesColumn
+            expenses={data.expenses}
+            emailExpenseImports={data.emailExpenseImports}
+            defaultCurrency={defaultCurrency}
+            actions={actions}
+          />
+        </div>
 
-        <RecurringPaymentsColumn
-          recurringPayments={data.recurringPayments}
-          recurringPaymentChecks={data.recurringPaymentChecks}
-          expenses={data.expenses}
-          usdPenRate={data.settings.usdPenRate}
-          defaultCurrency={defaultCurrency}
-          enabledCurrencies={enabledCurrencies}
-          actions={actions}
-        />
+        <div className="min-w-0">
+          <RecurringPaymentsColumn
+            recurringPayments={data.recurringPayments}
+            recurringPaymentChecks={data.recurringPaymentChecks}
+            expenses={data.expenses}
+            usdPenRate={data.settings.usdPenRate}
+            defaultCurrency={defaultCurrency}
+            enabledCurrencies={enabledCurrencies}
+            actions={actions}
+          />
+        </div>
       </section>
     </main>
   )

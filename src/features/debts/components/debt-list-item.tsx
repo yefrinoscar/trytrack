@@ -71,9 +71,10 @@ export const DebtListItem = memo(function DebtListItem({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              className="h-6 w-6"
+              className="tap-target h-6 w-6"
               size="icon"
               variant="ghost"
+              aria-label={`Actions for ${debt.name}`}
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >
@@ -120,7 +121,7 @@ export const DebtListItem = memo(function DebtListItem({
             value={debt.balance}
           />
         </div>
-        <div className="flex items-center justify-between gap-2 pt-4 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-4 text-xs">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
             <span>
               {paidCount}/{totalInstallments} paid

@@ -150,7 +150,9 @@ body {
   font-family: var(--font-sans);
   background-color: var(--background);
   background: var(--background-gradient);
-  overflow-x: hidden;
+  /* `clip` contains any accidental horizontal overflow without turning the
+     body into a scroll container. */
+  overflow-x: clip;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -196,13 +198,20 @@ pre code {
   color: #e8efff;
 }
 
+/*
+ * Page containers are sized with padding rather than a fixed width inside
+ * `calc()`. A percentage width plus a gap can still exceed a narrow viewport,
+ * and one container doing that drags the whole page sideways on a phone.
+ */
 .page-wrap {
-  width: min(1040px, calc(100% - 0.5rem));
+  width: 100%;
+  max-width: 1040px;
   margin-inline: auto;
+  padding-inline: 0.75rem;
 }
 
 .debts-page-wrap {
-  width: min(1280px, calc(100% - 0.5rem));
+  max-width: 1280px;
 }
 
 .page-wrap,
@@ -259,6 +268,18 @@ a {
   color: var(--foreground-soft);
   text-decoration: none;
   border: 1px solid transparent;
+}
+
+/*
+ * Icon-only nav item used in the mobile bar. 44px square so it is a
+ * comfortable thumb target, and the label stays available to assistive
+ * technology through aria-label.
+ */
+.sidebar-link-icon {
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
 }
 
 .sidebar-link:hover {
@@ -336,6 +357,26 @@ html::-webkit-scrollbar-corner,
 body::-webkit-scrollbar-corner,
 .custom-scrollbar::-webkit-scrollbar-corner {
   background: var(--shell);
+}
+
+/*
+ * The action icons inside list rows are small on purpose, so on touch screens
+ * they get an invisible expanded hit area instead of a bigger drawing.
+ */
+.tap-target {
+  position: relative;
+}
+
+.tap-target::after {
+  content: '';
+  position: absolute;
+  inset: -0.65rem;
+}
+
+@media (min-width: 1024px) {
+  .tap-target::after {
+    content: none;
+  }
 }
 
 @keyframes shell-route-enter {

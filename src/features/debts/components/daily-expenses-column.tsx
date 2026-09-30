@@ -1216,6 +1216,8 @@ export function DailyExpensesColumn({
                       type="button"
                       size="icon-xs"
                       variant="ghost"
+                      className="tap-target"
+                      aria-label={`Delete ${expense.description}`}
                       onClick={() => {
                         void actions.removeItem({
                           kind: 'expenses',

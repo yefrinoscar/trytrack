@@ -290,10 +290,11 @@ export function RecurringPaymentsColumn({
                           <button
                             type="button"
                             aria-pressed={isPaid}
+                            aria-label={paidHint}
                             title={
                               isPaid ? `${paidHint} · click to undo` : paidHint
                             }
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
+                            className={`tap-target flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
                               isPaid
                                 ? 'text-success hover:bg-success/15'
                                 : 'text-foreground-faint hover:bg-muted hover:text-foreground'
@@ -318,9 +319,10 @@ export function RecurringPaymentsColumn({
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
-                              className="h-6 w-6 self-center"
+                              className="tap-target h-6 w-6 self-center"
                               size="icon"
                               variant="ghost"
+                              aria-label={`Actions for ${payment.name}`}
                               onClick={(event) => event.stopPropagation()}
                               onPointerDown={(event) => event.stopPropagation()}
                             >
