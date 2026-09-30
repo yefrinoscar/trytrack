@@ -67,6 +67,28 @@ const avatarClassName =
 const accountMenuContentClassName =
   'w-52 rounded-2xl border-border bg-[color-mix(in_srgb,var(--popover)_92%,black)] p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]'
 
+/** Shared so the phone avatar and the desktop card offer the same items. */
+function AccountMenuItems({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <>
+      <DropdownMenuItem asChild>
+        <Link to="/settings" className="cursor-pointer rounded-xl">
+          <Settings className="h-4 w-4" />
+          Configuration
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator className="bg-border/80" />
+      <DropdownMenuItem
+        className="cursor-pointer rounded-xl text-danger focus:bg-[color-mix(in_srgb,var(--danger)_12%,var(--popover))] focus:text-danger"
+        onClick={onSignOut}
+      >
+        <LogOut className="h-4 w-4" />
+        Logout
+      </DropdownMenuItem>
+    </>
+  )
+}
+
 interface HeaderProps {
   isCollapsed: boolean
   onToggleCollapsed: () => void
@@ -97,25 +119,6 @@ export default function Header({
     })
   }
 
-  const accountMenuItems = (align: 'start' | 'end') => (
-    <DropdownMenuContent align={align} className={accountMenuContentClassName}>
-      <DropdownMenuItem asChild>
-        <Link to="/settings" className="cursor-pointer rounded-xl">
-          <Settings className="h-4 w-4" />
-          Configuration
-        </Link>
-      </DropdownMenuItem>
-      <DropdownMenuSeparator className="bg-border/80" />
-      <DropdownMenuItem
-        className="cursor-pointer rounded-xl text-danger focus:bg-[color-mix(in_srgb,var(--danger)_12%,var(--popover))] focus:text-danger"
-        onClick={signOut}
-      >
-        <LogOut className="h-4 w-4" />
-        Logout
-      </DropdownMenuItem>
-    </DropdownMenuContent>
-  )
-
   return (
     <aside
       className={cn(
@@ -145,14 +148,14 @@ export default function Header({
               <Link
                 to="/debts"
                 className={cn(
-                  'inline-flex w-fit shrink-0 items-center no-underline',
+                  'tap-target inline-flex w-fit shrink-0 items-center no-underline',
                   isCollapsed && 'lg:hidden',
                 )}
               >
                 <span className="lg:hidden">
                   <img
                     alt="Trytracker"
-                    className="h-8 w-8"
+                    className="h-9 w-9"
                     src="/favicon.svg"
                   />
                 </span>
@@ -233,12 +236,19 @@ export default function Header({
                     <button
                       type="button"
                       aria-label={`Account menu for ${displayName}`}
-                      className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--accent)_24%,transparent),transparent_68%),color-mix(in_srgb,var(--surface-muted)_82%,var(--panel))] text-xs font-semibold tracking-[0.12em] text-foreground lg:hidden"
+                      className="ml-auto flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--accent)_24%,transparent),transparent_68%),color-mix(in_srgb,var(--surface-muted)_82%,var(--panel))] text-xs font-semibold tracking-[0.12em] text-foreground lg:hidden"
                     >
                       {initials}
                     </button>
                   </DropdownMenuTrigger>
-                  {accountMenuItems('end')}
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={6}
+                    collisionPadding={12}
+                    className={accountMenuContentClassName}
+                  >
+                    <AccountMenuItems onSignOut={signOut} />
+                  </DropdownMenuContent>
                 </DropdownMenu>
               ) : null}
             </div>
@@ -336,7 +346,13 @@ export default function Header({
                       <div className={avatarClassName}>{initials}</div>
                     </Button>
                   </DropdownMenuTrigger>
-                  {accountMenuItems('end')}
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={6}
+                    className={accountMenuContentClassName}
+                  >
+                    <AccountMenuItems onSignOut={signOut} />
+                  </DropdownMenuContent>
                 </DropdownMenu>
 
                 <div

@@ -108,6 +108,7 @@ export function GmailConnectionCard({ result }: { result?: string }) {
                     window.location.assign('/api/email/gmail/connect')
                   }
                   size="sm"
+                  className="touch-tall"
                   type="button"
                   variant="outline"
                 >
@@ -118,6 +119,7 @@ export function GmailConnectionCard({ result }: { result?: string }) {
                   disabled={isWorking}
                   onClick={() => disconnect.mutate()}
                   size="sm"
+                  className="touch-tall"
                   type="button"
                   variant="ghost"
                 >
@@ -147,6 +149,7 @@ export function GmailConnectionCard({ result }: { result?: string }) {
                   window.location.assign('/api/email/gmail/connect')
                 }
                 size="sm"
+                className="touch-tall"
                 type="button"
               >
                 <Mail className="h-3.5 w-3.5" />

@@ -97,7 +97,7 @@ function SettingsView({
                           data.settings.currency === currencyCode)
                       }
                       className={cn(
-                        'rounded-lg border px-3 py-2 text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50',
+                        'touch-tall rounded-lg border px-3 py-2 text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50',
                         enabled
                           ? 'border-border-strong bg-popover text-foreground'
                           : 'border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground',

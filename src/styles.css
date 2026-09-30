@@ -379,6 +379,16 @@ body::-webkit-scrollbar-corner,
   }
 }
 
+/*
+ * Text buttons are drawn short to keep dense rows dense. On a touch screen
+ * they grow to a comfortable height instead.
+ */
+@media (max-width: 1023px) {
+  .touch-tall {
+    min-height: 2.5rem;
+  }
+}
+
 @keyframes shell-route-enter {
   from {
     opacity: 0;

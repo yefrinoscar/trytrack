@@ -169,7 +169,7 @@ export function RecurringPaymentsColumn({
         </div>
         <button
           type="button"
-          className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-sm font-medium transition hover:bg-muted"
+          className="touch-tall inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-sm font-medium transition hover:bg-muted"
           onClick={showCreateForm ? closeCreateForm : openCreateForm}
         >
           {showCreateForm ? 'Close' : 'New'}

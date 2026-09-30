@@ -138,7 +138,7 @@ export const DebtListItem = memo(function DebtListItem({
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 px-2 text-[11px]"
+              className="touch-tall h-7 px-2 text-[11px]"
               onClick={(event) => {
                 event.stopPropagation()
                 onPayNext(debt.id, nextInstallmentNumber)

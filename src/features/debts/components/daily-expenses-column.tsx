@@ -874,7 +874,7 @@ export function DailyExpensesColumn({
         <button
           type="button"
           className={cn(
-            'flex-1 rounded-md py-1.5 text-xs font-medium transition-colors',
+            'touch-tall flex-1 rounded-md py-1.5 text-xs font-medium transition-colors',
             tab === 'expenses'
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground',
@@ -886,7 +886,7 @@ export function DailyExpensesColumn({
         <button
           type="button"
           className={cn(
-            'flex-1 rounded-md py-1.5 text-xs font-medium transition-colors',
+            'touch-tall flex-1 rounded-md py-1.5 text-xs font-medium transition-colors',
             tab === 'charts'
               ? 'bg-background text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground',
@@ -947,6 +947,8 @@ export function DailyExpensesColumn({
                 type="button"
                 size="icon-sm"
                 variant="secondary"
+                className="tap-target"
+                aria-label="Add expense"
                 disabled={actions.isWorking}
                 onClick={submitExpense}
               >
